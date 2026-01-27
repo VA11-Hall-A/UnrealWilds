@@ -85,7 +85,7 @@ void UGravityManagerSubsystem::OnPhysScenePreTick(FPhysScene_Chaos* PhysScene, f
 {
 	// 如果没有引力源，直接跳过
 	if (GravitySources.Num() == 0) return;
-
+	
 	// 倒序遍历，方便在遍历中安全移除无效元素
 	for (int32 i = GravityReceivers.Num() - 1; i >= 0; --i)
 	{
