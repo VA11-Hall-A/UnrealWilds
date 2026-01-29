@@ -18,12 +18,6 @@ class UNREALWILDS_API APlanet : public ACelestialBody
 public:
 	// 构造函数
 	APlanet();
-	
-	UFUNCTION()
-	void ApplyInitialVelocity();
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Planet Settings")
-	FVector InitialVelocity;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UGravityReceiverComponent* GravityReceiver;

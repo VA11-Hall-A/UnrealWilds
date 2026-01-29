@@ -99,11 +99,39 @@ void UGravityReceiverComponent::OnRegister()
 	}
 }
 
+void UGravityReceiverComponent::ApplyInitialVelocity()
+{
+	if (TargetPrimitive)
+	{
+		// 确保物理模拟已开启，否则施加速度无效
+		if (!TargetPrimitive->IsSimulatingPhysics())
+		{
+			TargetPrimitive->SetSimulatePhysics(true);
+		}
+
+		TargetPrimitive->SetPhysicsLinearVelocity(InitialVelocity);
+
+		// Debug Log (可选)
+		UE_LOG(LogTemp, Log, TEXT("Actor %s Applied Initial Velocity: %s"), *GetOwner()->GetName(), *InitialVelocity.ToString());
+	}
+}
+
 
 // Called when the game starts
 void UGravityReceiverComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	if (UWorld* World = GetWorld())
+	{
+		if (UGravityManagerSubsystem* GravitySubsystem = World->GetSubsystem<UGravityManagerSubsystem>())
+		{
+			if (bIsActivatedOnStartUp)
+			{
+				RegisterGravity();
+				GravitySubsystem->OnGalaxyWakeUp.AddDynamic(this, &UGravityReceiverComponent::ApplyInitialVelocity);
+			}
+		}
+	}
 }
 
 void UGravityReceiverComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -133,6 +161,7 @@ FVector UGravityReceiverComponent::CalculateInitialVelocity()
 	// 3. 计算半径向量 (r) 和 距离 (Distance)
 	FVector RadiusVector = PlanetPos - SunPos;
 	double Distance = RadiusVector.Size();
+	Distance /= 100;
 
 	// 防止距离过近导致除以零
 	if (Distance < KINDA_SMALL_NUMBER)
@@ -142,7 +171,7 @@ FVector UGravityReceiverComponent::CalculateInitialVelocity()
 
 	// 4. 计算标量速率 (Speed)
 	// 公式: v = sqrt( (G * M) / r )
-	double Speed = FMath::Sqrt((G * SunMass) / Distance);
+	double Speed = FMath::Sqrt((G * SunMass) / Distance );
 
 	// 5. 计算速度方向
 	// 假设轨道平面是 XY 平面，围绕 Z 轴旋转
@@ -159,10 +188,7 @@ FVector UGravityReceiverComponent::CalculateInitialVelocity()
 	}
 
 	// 6. 组合最终向量
-	FVector ResultVelocity = TangentDirection * Speed;
-
-	// (可选) 如果你想直接在这个函数里应用速度，取消下面这行的注释：
-	// TargetPrimitive->SetPhysicsLinearVelocity(ResultVelocity);
+	FVector ResultVelocity = TangentDirection * Speed * 100;
 
 	return ResultVelocity;
 }

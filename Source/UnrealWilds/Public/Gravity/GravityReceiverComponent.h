@@ -9,9 +9,9 @@
 UENUM(BlueprintType)
 enum class EOrbitType : uint8
 {
-	CircularOrbit,      // 圆形轨道
-	EllipticalOrbit,    // 椭圆轨道
-	NoInitialVelocity   // 不设置初速度
+	CircularOrbit, // 圆形轨道
+	EllipticalOrbit, // 椭圆轨道
+	NoInitialVelocity // 不设置初速度
 };
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -31,7 +31,6 @@ public:
 	void UnregisterGravity();
 
 protected:
-
 	// Called when the game starts
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -50,12 +49,17 @@ protected:
 
 	//初始化设置
 	virtual void OnRegister() override;
-	
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Gravity")
+	bool bIsActivatedOnStartUp = true;
+
 	UPROPERTY(EditAnywhere, Category="Gravity")
 	bool bIsInitialClockWise = true;
-	UPROPERTY(EditAnywhere,Category="Gravity")
+	UPROPERTY(EditAnywhere, Category="Gravity")
 	EOrbitType OrbitType;
-	
-	UPROPERTY(VisibleAnywhere,blueprintReadWrite, Category="Gravity")
+
+	UPROPERTY(VisibleAnywhere, blueprintReadWrite, Category="Gravity")
 	FVector InitialVelocity;
+	UFUNCTION()
+	void ApplyInitialVelocity();
 };
