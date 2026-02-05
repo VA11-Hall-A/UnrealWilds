@@ -6,6 +6,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Gravity/GravitySourceComponent.h"
 #include "EngineUtils.h"
+#include "Gravity/GravityReceiverComponent.h"
 #include "Physics/Experimental/PhysScene_Chaos.h"
 
 void UGravityManagerSubsystem::RegisterGravitySource(UGravitySourceComponent* Source)
@@ -40,22 +41,22 @@ void UGravityManagerSubsystem::UnregisterGravitySource(UGravitySourceComponent* 
 	}
 }
 
-void UGravityManagerSubsystem::RegisterGravityReceiver(UPrimitiveComponent* PrimitiveComp)
+void UGravityManagerSubsystem::RegisterGravityReceiver(UGravityReceiverComponent* GravityReceiver)
 {
-	if (PrimitiveComp)
+	if (GravityReceiver)
 	{
-		GravityReceivers.AddUnique(PrimitiveComp);
+		GravityReceivers.AddUnique(GravityReceiver);
 	}
 }
 
-void UGravityManagerSubsystem::UnregisterGravityReceiver(UPrimitiveComponent* PrimitiveComp)
+void UGravityManagerSubsystem::UnregisterGravityReceiver(UGravityReceiverComponent* GravityReceiver)
 {
-	if (PrimitiveComp)
+	if (GravityReceiver)
 	{
 		// 移除所有匹配的 WeakPtr
-		GravityReceivers.RemoveAll([PrimitiveComp](const TWeakObjectPtr<UPrimitiveComponent>& Ptr)
+		GravityReceivers.RemoveAll([GravityReceiver](const TWeakObjectPtr<UGravityReceiverComponent>& Ptr)
 		{
-			return Ptr.Get() == PrimitiveComp;
+			return Ptr.Get() == GravityReceiver;
 		});
 	}
 }
@@ -89,27 +90,18 @@ void UGravityManagerSubsystem::OnPhysScenePreTick(FPhysScene_Chaos* PhysScene, f
 	// 倒序遍历，方便在遍历中安全移除无效元素
 	for (int32 i = GravityReceivers.Num() - 1; i >= 0; --i)
 	{
-		UPrimitiveComponent* Comp = GravityReceivers[i].Get();
-
+		UGravityReceiverComponent* GravityComp = GravityReceivers[i].Get();
+		UPrimitiveComponent* PrimitiveComp =GravityComp->TargetPrimitive;
 		// 1. 检查组件是否还存在
-		if (!Comp)
+		if (!GravityComp)
 		{
 			GravityReceivers.RemoveAt(i);
 			continue;
 		}
-
-		// 2. 检查是否开启了物理模拟（可能在运行时被关闭）
-		if (!Comp->IsSimulatingPhysics())
-		{
-			continue;
-		}
-
-		AActor* OwnerActor = Comp->GetOwner();
-		if (!OwnerActor) continue;
-
+		
 		FVector TotalGravity = FVector::ZeroVector;
-		FVector Location = Comp->GetComponentLocation();
-		bool bOwnerIsPlanet = OwnerActor->ActorHasTag(FName("Planet"));
+		FVector Location = PrimitiveComp->GetComponentLocation();
+		// bool bOwnerIsPlanet = OwnerActor->ActorHasTag(FName("Planet"));
 
 		// 叠加所有引力源的引力
 		for (TWeakObjectPtr Source : GravitySources)
@@ -117,13 +109,13 @@ void UGravityManagerSubsystem::OnPhysScenePreTick(FPhysScene_Chaos* PhysScene, f
 			if (Source == nullptr) continue;
 			AActor* SourceOwner = Source->GetOwner();
 			if (SourceOwner == nullptr) continue;
-
+			//
 			// 逻辑保持不变：行星之间互不施加引力
 			bool bSourceIsPlanet = (Source->SourceType == EGravitySourceType::Planet);
-			if (bSourceIsPlanet && bOwnerIsPlanet) continue;
-
+			if (bSourceIsPlanet && GravityComp->ReceiverType==EReceiverType::Planet) continue;
+			
 			// 避免自己吸引自己 (例如星球也是物理模拟物体时)
-			if (SourceOwner == OwnerActor) continue;
+			if (SourceOwner == GravityComp->GetOwner()) continue;
 			TotalGravity += Source->GetGravityAtPoint(Location);
 		}
 		if (GEngine)
@@ -139,7 +131,7 @@ void UGravityManagerSubsystem::OnPhysScenePreTick(FPhysScene_Chaos* PhysScene, f
 		// 施加引力
 		if (!TotalGravity.IsZero())
 		{
-			Comp->AddForce(TotalGravity * Comp->GetMass() * 100);
+			GravityComp->ApplyGravity(TotalGravity * PrimitiveComp->GetMass() * 100);
 		}
 	}
 }

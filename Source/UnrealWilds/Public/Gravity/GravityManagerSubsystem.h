@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "GravityManagerSubsystem.generated.h"
+class UGravityReceiverComponent;
 class UGravitySourceComponent;
 
 /**
@@ -29,8 +30,8 @@ public:
 	UFUNCTION(BlueprintCallable,Category="Gravity")
 	void UnregisterGravitySource(UGravitySourceComponent* Source);
 
-	void RegisterGravityReceiver(UPrimitiveComponent* PrimitiveComp);
-	void UnregisterGravityReceiver(UPrimitiveComponent* PrimitiveComp);
+	void RegisterGravityReceiver(UGravityReceiverComponent* GravityReceiver);
+	void UnregisterGravityReceiver(UGravityReceiverComponent* GravityReceiver);
 
 	UPROPERTY(BlueprintAssignable, Category = "Game Events")
 	FOnGalaxyWakeUp OnGalaxyWakeUp;
@@ -40,7 +41,7 @@ public:
 	void TriggerGalaxyWakeUp();
 private:
 	TArray<TWeakObjectPtr<UGravitySourceComponent>> GravitySources;
-	TArray<TWeakObjectPtr<UPrimitiveComponent>> GravityReceivers;
+	TArray<TWeakObjectPtr<UGravityReceiverComponent>> GravityReceivers;
 	FDelegateHandle PhysPreTickHandle;
 
 	
