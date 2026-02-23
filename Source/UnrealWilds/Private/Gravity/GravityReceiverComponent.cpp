@@ -5,6 +5,7 @@
 
 #include "OWSettings.h"
 #include "Gravity/GravityManagerSubsystem.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 // Sets default values for this component's properties
 UGravityReceiverComponent::UGravityReceiverComponent()
@@ -61,6 +62,12 @@ void UGravityReceiverComponent::OnRegister()
 		UPrimitiveComponent* RootPrim = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
 		checkf(RootPrim != nullptr, TEXT("root component must not be null here!"));
 		TargetPrimitive = RootPrim;
+
+		if (ReceiverType == EReceiverType::Character)
+		{
+			CachedCMC = Owner->FindComponentByClass<UCharacterMovementComponent>();
+		}
+
 		switch (OrbitType)
 		{
 		case EOrbitType::CircularOrbit:
@@ -96,7 +103,21 @@ void UGravityReceiverComponent::ApplyInitialVelocity()
 
 void UGravityReceiverComponent::ApplyGravity(const FVector& Force)
 {
-	TargetPrimitive->AddForce(Force);
+	if (ReceiverType == EReceiverType::Character && CachedCMC)
+	{
+		if (TargetPrimitive && TargetPrimitive->IsSimulatingPhysics())
+		{
+			TargetPrimitive->AddForce(Force);
+		}
+		else
+		{
+			CachedCMC->AddForce(Force);
+		}
+	}
+	else if (TargetPrimitive)
+	{
+		TargetPrimitive->AddForce(Force);
+	}
 }
 
 // Called when the game starts

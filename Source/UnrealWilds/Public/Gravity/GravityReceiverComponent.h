@@ -43,6 +43,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	EReceiverType ReceiverType;
 	
+	UPROPERTY()
+	TObjectPtr<class UCharacterMovementComponent> CachedCMC;
+
 	UFUNCTION()
 	void ApplyGravity(const FVector& Force);
 
