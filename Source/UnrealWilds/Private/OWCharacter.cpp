@@ -29,12 +29,10 @@ void AOWCharacter::Tick(float DeltaTime)
 	{
 		FVector GravityDirection = (CurrentPlanet->GetActorLocation() - GetActorLocation()).GetSafeNormal();
 		
-		// Align character's feet to face the planet direction (UpVector = -GravityDirection)
-		FVector TargetUp = -GravityDirection;
-		FQuat TargetRotation = FRotationMatrix::MakeFromZX(GetActorForwardVector(), TargetUp).ToQuat();
-		
-		// Interpolate rotation for smoothness or set directly
-		SetActorRotation(TargetRotation);
+		if (UCharacterMovementComponent* CMC = GetCharacterMovement())
+		{
+			CMC->SetGravityDirection(GravityDirection);
+		}
 	}
 }
 
@@ -52,14 +50,14 @@ void AOWCharacter::SetCurrentPlanet(ACelestialBody* NewPlanet)
 	{
 		if (GetCharacterMovement())
 		{
-			GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+			GetCharacterMovement()->SetMovementMode(MOVE_Falling);
 		}
 	}
 	else
 	{
 		if (GetCharacterMovement())
 		{
-			GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+			GetCharacterMovement()->SetMovementMode(MOVE_None);
 		}
 	}
 }
