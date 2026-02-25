@@ -7,9 +7,7 @@
 
 APlanet::APlanet()
 {
-	BodyMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BodyMesh"));
 	GravityReceiver=CreateDefaultSubobject<UGravityReceiverComponent>(TEXT("GravityReceiver"));
-	RootComponent = BodyMesh;
 }
 
 
