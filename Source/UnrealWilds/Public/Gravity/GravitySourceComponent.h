@@ -3,41 +3,43 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
 #include "GravitySourceComponent.generated.h"
 
-// 定义天体类型枚举
-UENUM(BlueprintType)
-enum class EGravitySourceType : uint8
-{
-	Sun UMETA(DisplayName = "Sun (Inverse Square)"),   // 太阳：距离平方反比
-	Planet UMETA(DisplayName = "Planet (Inverse Linear)") // 行星：距离反比
-};
+struct FGravityAttractorData;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
-class UNREALWILDS_API UGravitySourceComponent : public UActorComponent
+class UNREALWILDS_API UGravitySourceComponent : public USceneComponent
 {
 	GENERATED_BODY()
 
 public:	
+	// Sets default values for this component's properties
 	UGravitySourceComponent();
-
-	// 天体类型
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Gravity")
-	EGravitySourceType SourceType = EGravitySourceType::Planet;
+	// Called every frame
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
+ 
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attractor")
+	bool bUseGravityAtRadius = true;
+ 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attractor", meta = (ForceUnits="Kg", ClampMin = "1", EditConditionHides, EditCondition = "!bUseGravityAtRadius"))
+	double Mass = 5.9722E24;
+ 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attractor", meta = (EditConditionHides, EditCondition = "bUseGravityAtRadius"))
+	double Gravity = 981.0;
+ 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attractor", meta = (EditConditionHides, EditCondition = "bUseGravityAtRadius"))
+	double Radius = 5000.0;
+ 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attractor")
+	bool ApplyGravity = true;
 	
-	// 星球质量（kg）
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Gravity")
-	float Mass = 1e24f;
- 
-	// 引力作用半径（米）
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Gravity")
-	float GravityRadius = 30000.f;
- 
-	// 行星半径（米）
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Gravity")
-	float PlanetRadius = 200.f;
- 
-	// 计算目标点引力矢量
-	FVector GetGravityAtPoint(const FVector& Point) const;
+protected:
+	// Called when the game starts
+	virtual void BeginPlay() override;
+
+		
 };

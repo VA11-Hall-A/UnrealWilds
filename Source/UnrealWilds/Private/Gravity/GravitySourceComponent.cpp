@@ -2,71 +2,58 @@
 
 
 #include "Gravity/GravitySourceComponent.h"
-#include "OWSettings.h"
+#include "Gravity/GravityWorldSubsystem.h"
 
 // Sets default values for this component's properties
 UGravitySourceComponent::UGravitySourceComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
+	// off to improve performance if you don't need them.
+	PrimaryComponentTick.bCanEverTick = true;
+
+	// ...
 }
 
 
-FVector UGravitySourceComponent::GetGravityAtPoint(const FVector& Point) const
+// Called when the game starts
+void UGravitySourceComponent::BeginPlay()
 {
-	FVector Center = GetOwner()->GetActorLocation();
-	FVector Dir = Center - Point;
-	double Dist = Dir.Size()/100;
+	Super::BeginPlay();
 
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			2, // 使用 -1 确保每帧都会产生新消息，或者使用特定 Key 覆盖旧消息
-			1, // 显示持续时间（秒）
-			FColor::Red, // 字体颜色
-			FString::Printf(TEXT("r:%f "), Dist)
-		);
-	}
-	// 超出最大引力范围，无引力
-	if (Dist > GravityRadius)
-		return FVector::ZeroVector;
+	// ...
 	
-	const float G = GetDefault<UOWSettings>()->GravityConstant;
- 
-	double GravityStrength = 0.0f;
-
-	if (SourceType == EGravitySourceType::Sun)
-	{
-		// --- 太阳模式：距离平方反比 (1/r^2) ---
-		if (Dist >= PlanetRadius)
-		{
-			// 公式: G * M / r^2
-			GravityStrength = (G * Mass) / (Dist * Dist);
-		}
-		else
-		{
-			// 内部线性引力，匹配表面的 GM/R^2
-			// 公式: (G * M * r) / R^3
-			GravityStrength = (G * Mass * Dist) / (PlanetRadius * PlanetRadius * PlanetRadius);
-		}
-	}
-	else
-	{
-		// --- 行星模式：距离反比 (1/r) ---
-		if (Dist >= PlanetRadius)
-		{
-			// 公式: G * M / r
-			GravityStrength = (G * Mass) / Dist;
-		}
-		else
-		{
-			// 内部线性引力，需要匹配表面的 GM/R
-			// 为了保证在 Dist == PlanetRadius 时引力连续：
-			// 表面引力 SurfaceGravity = (G * Mass) / PlanetRadius
-			// 内部引力 = SurfaceGravity * (Dist / PlanetRadius)
-			// 推导: (G * M / R) * (r / R) = (G * M * r) / R^2
-			GravityStrength = (G * Mass * Dist) / (PlanetRadius * PlanetRadius);
-		}
-	}
- 
-	return Dir.GetSafeNormal() * GravityStrength;
 }
+
+
+// Called every frame
+void UGravitySourceComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// ...
+}
+
+void UGravitySourceComponent::OnRegister()
+{
+	Super::OnRegister();
+	if (UWorld* World = GetWorld())
+	{
+		if (UGravityWorldSubsystem* GravitySubsystem=World->GetSubsystem<UGravityWorldSubsystem>())
+		{
+			GravitySubsystem->AddSource(this);
+		}
+	}
+}
+
+void UGravitySourceComponent::OnUnregister()
+{
+	Super::OnUnregister();
+	if (UWorld* World = GetWorld())
+	{
+		if (UGravityWorldSubsystem* GravitySubsystem=World->GetSubsystem<UGravityWorldSubsystem>())
+		{
+			GravitySubsystem->RemoveSource(this);
+		}
+	}
+}
+
