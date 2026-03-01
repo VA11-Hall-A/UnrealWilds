@@ -3,17 +3,33 @@
 
 #include "Gravity/GravitySourceComponent.h"
 #include "Gravity/GravityWorldSubsystem.h"
+#include "Gravity/GravityAsyncCallback.h"
 
 // Sets default values for this component's properties
 UGravitySourceComponent::UGravitySourceComponent()
 {
-	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
-	// off to improve performance if you don't need them.
-	PrimaryComponentTick.bCanEverTick = true;
 
-	// ...
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = true; 
+	PrimaryComponentTick.TickGroup = ETickingGroup::TG_PrePhysics; 
 }
 
+
+FGravitySourceData UGravitySourceComponent::GetGravitySourceData() const
+{
+	FGravitySourceData GravitySourceData;
+	GravitySourceData.Location=GetComponentLocation();
+	GravitySourceData.bUseInverseSquare=bUseInverseSquare;
+	if (bUseGravityAtRadius)
+	{
+		GravitySourceData.MassDotG=Gravity*Radius*Radius;
+	}
+	else
+	{
+		GravitySourceData.MassDotG = Mass * 6.67430E-5;
+	}
+	return GravitySourceData;
+}
 
 // Called when the game starts
 void UGravitySourceComponent::BeginPlay()
@@ -24,13 +40,27 @@ void UGravitySourceComponent::BeginPlay()
 	
 }
 
+void UGravitySourceComponent::BuildAsyncInput()
+{
+	if (ApplyGravity)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (UGravityWorldSubsystem* GravitySubsystem=World->GetSubsystem<UGravityWorldSubsystem>())
+			{
+				GravitySubsystem->AddGravitySourceData(GetGravitySourceData());
+			}
+		}
+	}
+}
+
 
 // Called every frame
 void UGravitySourceComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// ...
+	BuildAsyncInput();
 }
 
 void UGravitySourceComponent::OnRegister()

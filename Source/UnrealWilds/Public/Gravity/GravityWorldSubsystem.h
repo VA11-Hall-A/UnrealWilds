@@ -7,6 +7,8 @@
 #include "GravitySourceComponent.h"
 #include "GravityWorldSubsystem.generated.h"
 
+class FGravityAsyncCallback;
+struct FGravitySourceData;
 /**
  * 
  */
@@ -25,6 +27,11 @@ public: // UTickableWorldSubsystem overrides
 	// Keep track of any attractors (optional)
 	void AddSource(UGravitySourceComponent* GravityAttractorComponent);
 	void RemoveSource(UGravitySourceComponent* GravityAttractorComponent);
+
+	virtual void RegisterAsyncCallback(); 
+	virtual bool IsAsyncCallbackRegistered() const;
+	void AddGravitySourceData(const FGravitySourceData& InputData) const;
+	FGravityAsyncCallback* AsyncCallback = nullptr;
  
 protected:
  
