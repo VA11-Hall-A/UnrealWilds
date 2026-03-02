@@ -2,14 +2,22 @@
 
 
 #include "Character/UWCharacter.h"
-
+#include "Camera/CameraComponent.h"
 #include "Character/UWCharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/Controller.h"
+#include "Engine/Engine.h"
 
 // Sets default values
 inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer): Super(
 	ObjectInitializer.SetDefaultSubobjectClass<UUWCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
-
+	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bStartWithTickEnabled = false;
+	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
+	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
+	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.f, 0.f, 50.f + BaseEyeHeight));
+	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 }
 
 // Called when the game starts or when spawned
@@ -18,14 +26,11 @@ void AUWCharacter::BeginPlay()
 	Super::BeginPlay();
 }
 
-// Called every frame
-void AUWCharacter::Tick(float DeltaTime)
+void AUWCharacter::MoveForward(float Value)
 {
-	Super::Tick(DeltaTime);
 }
 
-// Called to bind functionality to input
-void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+void AUWCharacter::MoveRight(float Value)
 {
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
+
