@@ -43,19 +43,45 @@ void FGravityAsyncCallback::OnPreIntegrate_Internal()
 					{
 						// Direction
 						FVector Direction(GravityAttractorData.Location - ActiveParticle.GetX());
+						double Distance =Direction.Length();
+						Distance = FMath::Max(Distance, UE_DOUBLE_SMALL_NUMBER);
 						double SquaredDistance = FVector::DotProduct(Direction, Direction); // We'll be using UE units here, no meters... 
 
 						// Intensity
 						double Intensity = 0.f;
+						bool bIsInsidePlanet = Distance < GravityAttractorData.PlanetRadius;
+						
 						if (GravityAttractorData.bUseInverseSquare)
 						{
-							Intensity = GravityAttractorData.MassDotG / SquaredDistance;
+							if (bIsInsidePlanet)
+							{
+								// 星球内部：引力与距离中心点成正比 (均匀球体模型)
+								double R3 = FMath::Pow(GravityAttractorData.PlanetRadius, 3.0);
+								Intensity = (GravityAttractorData.MassDotG / R3) * Distance;
+							}
+							else
+							{
+								// 星球外部：标准的平方反比定律
+								Intensity = GravityAttractorData.MassDotG / SquaredDistance;
+							}
 						}
 						else
 						{
-							Intensity=GravityAttractorData.MassDotG / Direction.Length();
+							// 非平方反比的 Gameplay 逻辑分支
+							if (bIsInsidePlanet)
+							{
+								// 为了保证穿过地表时引力的平滑过渡，内部同样做线性插值递减到地心为0
+								double SurfaceIntensity = GravityAttractorData.MassDotG / GravityAttractorData.PlanetRadius;
+								Intensity = SurfaceIntensity * (Distance / GravityAttractorData.PlanetRadius);
+							}
+							else
+							{
+								Intensity = GravityAttractorData.MassDotG / Distance;
+							}
 						}
-						Direction.Normalize();
+
+						// 使用已经计算好的 Distance 进行归一化，替代原有的 Direction.Normalize() 节省性能
+						Direction /= Distance;
 
 						// Add the new acceleration to the force field.  
 						AdditionalAcceleration += Intensity * Direction;

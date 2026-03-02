@@ -4,6 +4,7 @@ struct FGravitySourceData
 {
 	FVector Location;
 	double MassDotG;
+	double PlanetRadius;
 	bool bUseInverseSquare;
 };
 

@@ -20,14 +20,9 @@ FGravitySourceData UGravitySourceComponent::GetGravitySourceData() const
 	FGravitySourceData GravitySourceData;
 	GravitySourceData.Location=GetComponentLocation();
 	GravitySourceData.bUseInverseSquare=bUseInverseSquare;
-	if (bUseGravityAtRadius)
-	{
-		GravitySourceData.MassDotG=Gravity*Radius*Radius;
-	}
-	else
-	{
-		GravitySourceData.MassDotG = Mass * 6.67430E-5;
-	}
+	GravitySourceData.MassDotG = Mass * 6.67430E-5;
+	GravitySourceData.PlanetRadius=PlanetRadius;
+	
 	return GravitySourceData;
 }
 
