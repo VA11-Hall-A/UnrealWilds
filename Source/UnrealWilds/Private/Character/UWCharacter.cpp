@@ -7,6 +7,9 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Controller.h"
 #include "Engine/Engine.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputActionValue.h"
 
 // Sets default values
 inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer): Super(
@@ -26,11 +29,62 @@ void AUWCharacter::BeginPlay()
 	Super::BeginPlay();
 }
 
-void AUWCharacter::MoveForward(float Value)
+//////////////////////////////////////////////////////////////////////////
+// Input
+
+void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	// Set up action bindings
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	{
+		// Jumping
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AUWCharacter::JumpInput);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+
+		// Moving
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AUWCharacter::Move);
+
+		// Looking
+		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AUWCharacter::Look);
+
+		// Shooting
+		EnhancedInputComponent->BindAction(ShootAction, ETriggerEvent::Started, this, &AUWCharacter::Shoot);
+
+		// Ascending
+		EnhancedInputComponent->BindAction(AscendAction, ETriggerEvent::Triggered, this, &AUWCharacter::Ascend);
+
+		// Descending
+		EnhancedInputComponent->BindAction(DescendAction, ETriggerEvent::Triggered, this, &AUWCharacter::Descend);
+	}
+	else
+	{
+		// UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input Component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
+	}
+}
+
+void AUWCharacter::Move(const FInputActionValue& Value)
 {
 }
 
-void AUWCharacter::MoveRight(float Value)
+void AUWCharacter::Look(const FInputActionValue& Value)
 {
 }
+
+void AUWCharacter::Shoot()
+{
+}
+
+void AUWCharacter::Ascend()
+{
+}
+
+void AUWCharacter::Descend()
+{
+}
+
+void AUWCharacter::JumpInput()
+{
+	Jump();
+}
+
 
