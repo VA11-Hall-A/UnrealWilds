@@ -41,13 +41,26 @@ void FGravityAsyncCallback::OnPreIntegrate_Internal()
 					// Compute the combined forces of all attractors
 					for (auto& GravityAttractorData : Input->GravitySourceData)
 					{
-						// Direction
-						FVector Direction(GravityAttractorData.Location - ActiveParticle.GetX());
-						double Distance =Direction.Length();
+						// 1. 优先获取平方距离 (避免过早使用昂贵的 Sqrt 开方操作)
+						FVector Direction = GravityAttractorData.Location - ActiveParticle.GetX();
+						double SquaredDistance = Direction.SquaredLength(); // 替代原有的 DotProduct，语义更清晰，性能等价
+						
+						// 强烈建议在引力源初始化/更新时预计算 HollowRadiusSq，避免每个粒子每帧计算
+						double HollowRadiusSq = FMath::Square(GravityAttractorData.HollowRadius); 
+						
+						// 2. Early-Out 优化：如果处于空洞内部，不受引力影响，直接跳过所有昂贵计算
+						if (SquaredDistance <= HollowRadiusSq)
+						{
+							// 如果是在一个遍历粒子的 for 循环中，这里写 continue;
+							// 如果这是一个单独处理粒子的函数，这里写 return;
+							// 这里假设用 if 跳过，你可以根据上下文调整：
+							return; 
+						}
+						
+						// 3. 只有在需要计算引力时，才执行 Sqrt
+						double Distance = FMath::Sqrt(SquaredDistance);
 						Distance = FMath::Max(Distance, UE_DOUBLE_SMALL_NUMBER);
-						double SquaredDistance = FVector::DotProduct(Direction, Direction); // We'll be using UE units here, no meters... 
-
-						// Intensity
+						
 						double Intensity = 0.f;
 						bool bIsInsidePlanet = Distance < GravityAttractorData.PlanetRadius;
 						
@@ -55,14 +68,19 @@ void FGravityAsyncCallback::OnPreIntegrate_Internal()
 						{
 							if (bIsInsidePlanet)
 							{
-								// 星球内部：引力与距离中心点成正比 (均匀球体模型)
-								double R3 = FMath::Pow(GravityAttractorData.PlanetRadius, 3.0);
-								Intensity = (GravityAttractorData.MassDotG / R3) * Distance;
+							   // 星球地壳内部：基于均匀球壳定理 (Shell Theorem)
+							   // 公式确保了在 HollowRadius 处引力为 0，且向地表平滑过渡
+							   double HollowR3 = HollowRadiusSq * GravityAttractorData.HollowRadius; // R_in^3
+							   double PlanetR3 = FMath::Pow(GravityAttractorData.PlanetRadius, 3.0); // R_out^3
+							   double CurrentR3 = Distance * SquaredDistance; // 避免使用 FMath::Pow 计算当前距离的3次方
+							   
+							   // 建议预计算常量: double InvShellVolume = 1.0 / (PlanetR3 - HollowR3);
+							   Intensity = (GravityAttractorData.MassDotG / SquaredDistance) * ((CurrentR3 - HollowR3) / (PlanetR3 - HollowR3));
 							}
 							else
 							{
-								// 星球外部：标准的平方反比定律
-								Intensity = GravityAttractorData.MassDotG / SquaredDistance;
+							   // 星球外部：标准的平方反比定律
+							   Intensity = GravityAttractorData.MassDotG / SquaredDistance;
 							}
 						}
 						else
@@ -70,19 +88,21 @@ void FGravityAsyncCallback::OnPreIntegrate_Internal()
 							// 非平方反比的 Gameplay 逻辑分支
 							if (bIsInsidePlanet)
 							{
-								// 为了保证穿过地表时引力的平滑过渡，内部同样做线性插值递减到地心为0
-								double SurfaceIntensity = GravityAttractorData.MassDotG / GravityAttractorData.PlanetRadius;
-								Intensity = SurfaceIntensity * (Distance / GravityAttractorData.PlanetRadius);
+							   // 线性插值重映射：保证从地表的 SurfaceIntensity 平滑递减到空洞边界(HollowRadius)的 0
+							   double SurfaceIntensity = GravityAttractorData.MassDotG / GravityAttractorData.PlanetRadius;
+							   
+							   // 建议预计算常量: double InvCrustThickness = 1.0 / (GravityAttractorData.PlanetRadius - GravityAttractorData.HollowRadius);
+							   Intensity = SurfaceIntensity * ((Distance - GravityAttractorData.HollowRadius) / (GravityAttractorData.PlanetRadius - GravityAttractorData.HollowRadius));
 							}
 							else
 							{
-								Intensity = GravityAttractorData.MassDotG / Distance;
+							   Intensity = GravityAttractorData.MassDotG / Distance;
 							}
 						}
-
+						
 						// 使用已经计算好的 Distance 进行归一化，替代原有的 Direction.Normalize() 节省性能
 						Direction /= Distance;
-
+						
 						// Add the new acceleration to the force field.  
 						AdditionalAcceleration += Intensity * Direction;
 

@@ -31,6 +31,8 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Source")
 	double PlanetRadius = 500.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Source")
+	double HollowRadius = 500.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Source")
 	bool ApplyGravity = true;

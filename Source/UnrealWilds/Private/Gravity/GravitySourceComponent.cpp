@@ -22,6 +22,7 @@ FGravitySourceData UGravitySourceComponent::GetGravitySourceData() const
 	GravitySourceData.bUseInverseSquare=bUseInverseSquare;
 	GravitySourceData.MassDotG = Mass * 6.67430E-5;
 	GravitySourceData.PlanetRadius=PlanetRadius;
+	GravitySourceData.HollowRadius=HollowRadius;
 	
 	return GravitySourceData;
 }
