@@ -5,6 +5,8 @@
 #include "Gravity/GravityAsyncCallback.h"
 #include "Physics/Experimental/PhysScene_Chaos.h"
 #include "PBDRigidsSolver.h"
+#include "GameFramework/CharacterMovementComponent.h"
+
 
 void UGravityWorldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -35,6 +37,12 @@ TStatId UGravityWorldSubsystem::GetStatId() const
 void UGravityWorldSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	UpdateCMCGravities();
+}
+
+void UGravityWorldSubsystem::RegisterPlayerCharacter(UCharacterMovementComponent* InCMComponent)
+{
+	CMComponent=InCMComponent;
 }
 
 void UGravityWorldSubsystem::AddSource(UGravitySourceComponent* GravityAttractorComponent)
@@ -69,5 +77,46 @@ void UGravityWorldSubsystem::AddGravitySourceData(const FGravitySourceData& Inpu
 	{
 		FGravityAsyncInput* Input=AsyncCallback->GetProducerInputData_External();
 		Input->GravitySourceData.Add(InputData);
+	}
+}
+
+void UGravityWorldSubsystem::UpdateCMCGravities()
+{
+	//for (int i = 0; i < TrackedCharacterMovementComponents.Num(); i++)
+	if (CMComponent !=nullptr)
+	{
+		// Compute the 
+		FVector AdditionalAcceleration = FVector::ZeroVector; 
+		for (auto& GravityAttractor: Sources)
+		{
+			if ( GravityAttractor->ApplyGravity)
+			{
+				FGravitySourceData GravityAttractorData = GravityAttractor->GetGravitySourceData();
+				double Intensity=0.f;
+				// Direction
+				FVector Direction(GravityAttractorData.Location - CMComponent->GetActorLocation());
+				
+				if (GravityAttractorData.bUseInverseSquare)
+				{
+					double SquaredDistance = FVector::DotProduct(Direction, Direction); // We'll be using UE units here, no meters...
+					Intensity = GravityAttractorData.MassDotG / SquaredDistance;
+					
+				}
+				else
+				{
+					Intensity=GravityAttractorData.MassDotG/Direction.Length();
+				}
+				Direction.Normalize();
+	 
+				// Add the new acceleration to the force field.  
+				AdditionalAcceleration += Intensity * Direction;
+			}
+		}
+ 
+		DrawDebugDirectionalArrow(GetWorld(), CMComponent->GetActorLocation(), CMComponent->GetActorLocation() + AdditionalAcceleration, 1.0, FColor::Red, 0, false, 1.0f  );
+		DrawDebugString(GetWorld(), CMComponent->GetActorLocation(), * FString::Printf(TEXT("%.2f"), AdditionalAcceleration.Length()), nullptr, FColor::Red, 0, false, 1.0f  );
+		
+		CMComponent->AddForce(AdditionalAcceleration);
+		CMComponent->SetGravityDirection(AdditionalAcceleration.GetSafeNormal());
 	}
 }

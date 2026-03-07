@@ -29,9 +29,9 @@ public:
 		meta = (ForceUnits="Kg", ClampMin = "1"))
 	double Mass = 5.9722E24;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Source")
-	double PlanetRadius = 500.0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Source")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Source",meta = (ForceUnits="cm", ClampMin = "1"))
+	double PlanetRadius = 25000.0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Source",meta = (ForceUnits="cm", ClampMin = "0.1"))
 	double HollowRadius = 500.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Source")

@@ -7,8 +7,11 @@
 #include "GravitySourceComponent.h"
 #include "GravityWorldSubsystem.generated.h"
 
+class AUWCharacter;
 class FGravityAsyncCallback;
+class UCharacterMovementComponent;
 struct FGravitySourceData;
+
 /**
  * 
  */
@@ -23,6 +26,11 @@ public: // UTickableWorldSubsystem overrides
 	virtual TStatId GetStatId() const override;
 	
 	virtual void Tick(float DeltaTime) override;
+
+	UFUNCTION(BlueprintCallable)
+	void RegisterPlayerCharacter(UCharacterMovementComponent* InCMComponent);
+	
+	void UpdateCMCGravities();
 	
 	// Keep track of any attractors (optional)
 	void AddSource(UGravitySourceComponent* GravityAttractorComponent);
@@ -37,4 +45,7 @@ protected:
  
 	// List of existing gravity attractors in the world
 	TArray<TWeakObjectPtr<UGravitySourceComponent>> Sources;
+
+	UPROPERTY(VisibleInstanceOnly)
+	TObjectPtr<UCharacterMovementComponent> CMComponent = nullptr;
 };
