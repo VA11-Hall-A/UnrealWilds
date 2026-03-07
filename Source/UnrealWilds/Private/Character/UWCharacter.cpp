@@ -9,7 +9,10 @@
 #include "Character/UWCharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Controller.h"
+#include "InputActionValue.h"
 #include "Engine/Engine.h"
+#include "Gravity/GravityWorldSubsystem.h"
+#include "Pawn/ThrusterComponent.h"
 
 // Sets default values
 
@@ -23,6 +26,10 @@ inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer)
 	FirstPersonCameraComponent->SetupAttachment(GetCapsuleComponent());
 	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.f, 0.f, 50.f + BaseEyeHeight));
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
+
+	Thruster=CreateDefaultSubobject<UThrusterComponent>(TEXT("Thruster"));
+	Thruster->ThrustForce=1000.0;
+	Thruster->bIsCharacterMode=true;
 }
 
 // Called when the game starts or when spawned
@@ -42,6 +49,14 @@ void AUWCharacter::BeginPlay()
 			}
 		}
 	}
+	if (UWorld* World = GetWorld())
+	{
+		if (UGravityWorldSubsystem* GravitySubsystem = World->GetSubsystem<UGravityWorldSubsystem>())
+		{
+			GravitySubsystem->RegisterPlayerCharacter(GetCharacterMovement());
+			UE_LOG(LogTemp, Warning, TEXT("Character Registered to Subsystem!"));
+		}
+	}
 }
 
 // Called to bind functionality to input
@@ -59,6 +74,14 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		{
 			EIC->BindAction(LookAction, ETriggerEvent::Triggered, this, &AUWCharacter::Look);
 		}
+		if (JumpAction)
+		{
+			EIC->BindAction(JumpAction, ETriggerEvent::Triggered, this, &AUWCharacter::Jump);
+		}
+		if (FlyingMoveAction)
+		{
+			EIC->BindAction(FlyingMoveAction, ETriggerEvent::Triggered, this, &AUWCharacter::FlyingMove);
+		}
 	}
 }
 
@@ -66,24 +89,66 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 
 void AUWCharacter::Move(const FInputActionValue& Value)
 {
-	const FVector2D MovementVector = Value.Get<FVector2D>();
+	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	if (Controller)
-	{
-		// Forward / backward
-		AddMovementInput(GetActorForwardVector(), MovementVector.Y);
-		// Right / left
-		AddMovementInput(GetActorRightVector(), MovementVector.X);
-	}
+	FVector ForwardDirection = GetActorForwardVector();
+	FVector RightDirection = GetActorRightVector();
+	// 6. 根据输入向量沿计算出的两个贴地平面方向移动
+	AddMovementInput(ForwardDirection, MovementVector.Y);
+	AddMovementInput(RightDirection, MovementVector.X);
 }
 
 void AUWCharacter::Look(const FInputActionValue& Value)
 {
-	const FVector2D LookAxisVector = Value.Get<FVector2D>();
+	const FVector LookAxisVector = Value.Get<FVector>();
 
 	if (Controller)
 	{
 		AddControllerYawInput(LookAxisVector.X);
 		AddControllerPitchInput(LookAxisVector.Y);
+	}
+}
+
+void AUWCharacter::FlyingMove(const FInputActionValue& Value)
+{
+	FVector MovemntVector = Value.Get<FVector>();
+	FVector FinalVector = GetActorForwardVector() * MovemntVector.Y + GetActorRightVector() * MovemntVector.X + GetActorUpVector() * MovemntVector.Z;
+	if (Thruster)
+	{
+		Thruster->AddForceToMovemntComponent(FinalVector);
+	}
+}
+
+void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
+{
+	Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
+	APlayerController* PC = Cast<APlayerController>(GetController());
+
+	if (PC == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlayerController or InputMappingContext is null!"));
+		return;
+	}
+	ULocalPlayer* LocalPlayer = PC->GetLocalPlayer();
+	if (!LocalPlayer)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("LocalPlayer is null!"));
+		return;
+	}
+	UEnhancedInputLocalPlayerSubsystem* InputSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	if (!InputSubsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EnhancedInputLocalPlayerSubsystem is null!"));
+		return;
+	}
+
+	if (PrevMovementMode == MOVE_Walking)
+	{
+		InputSubsystem->AddMappingContext(FlyingMappingContext, 1);
+		return;
+	}
+	if (GetCharacterMovement()->MovementMode == MOVE_Walking)
+	{
+		InputSubsystem->RemoveMappingContext(FlyingMappingContext);
 	}
 }

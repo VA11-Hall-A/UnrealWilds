@@ -3,6 +3,7 @@
 
 #include "Character/UWCharacterMovementComponent.h"
 
+#include "Character/UWCharacter.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
 
@@ -144,4 +145,5 @@ void UUWCharacterMovementComponent::UpdateBasedMovement(float DeltaSeconds)
 			CharacterOwner->GetMesh()->ApplyDeltaToAllPhysicsTransforms(DeltaPosition, DeltaQuat);
 		}
 	}
+
 }
