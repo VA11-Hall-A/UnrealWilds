@@ -11,6 +11,14 @@ class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
+
+UENUM(BlueprintType)
+enum class ECharacterMovementState : uint8
+{
+	SurfaceGravity UMETA(DisplayName = "Surface Gravity"),
+	ZeroG UMETA(DisplayName = "Zero Gravity")
+};
+
 UCLASS()
 class UNREALWILDS_API AUWCharacter : public ACharacter
 {
@@ -20,9 +28,20 @@ public:
 	
 	AUWCharacter(const FObjectInitializer& ObjectInitializer);
 
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void EnterSurfaceGravity();
+
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void EnterZeroG();
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+
+	void CheckInitialMovementState();
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
+	ECharacterMovementState CurrentMovementState = ECharacterMovementState::SurfaceGravity;
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;

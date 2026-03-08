@@ -8,11 +8,14 @@
 #include "Camera/CameraComponent.h"
 #include "Character/UWCharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SphereComponent.h"
 #include "GameFramework/Controller.h"
 #include "InputActionValue.h"
 #include "Engine/Engine.h"
 #include "Gravity/GravityWorldSubsystem.h"
 #include "Pawn/ThrusterComponent.h"
+#include "Astro/Planet.h"
+#include "EngineUtils.h"
 
 // Sets default values
 
@@ -27,9 +30,9 @@ inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer)
 	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.f, 0.f, 50.f + BaseEyeHeight));
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
-	Thruster=CreateDefaultSubobject<UThrusterComponent>(TEXT("Thruster"));
-	Thruster->ThrustForce=1000.0;
-	Thruster->bIsCharacterMode=true;
+	Thruster = CreateDefaultSubobject<UThrusterComponent>(TEXT("Thruster"));
+	Thruster->ThrustForce = 1000.0;
+	Thruster->bIsCharacterMode = true;
 }
 
 // Called when the game starts or when spawned
@@ -57,6 +60,8 @@ void AUWCharacter::BeginPlay()
 			UE_LOG(LogTemp, Warning, TEXT("Character Registered to Subsystem!"));
 		}
 	}
+
+	CheckInitialMovementState();
 }
 
 // Called to bind functionality to input
@@ -102,10 +107,26 @@ void AUWCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector LookAxisVector = Value.Get<FVector>();
 
-	if (Controller)
+	if (CurrentMovementState == ECharacterMovementState::ZeroG)
 	{
-		AddControllerYawInput(LookAxisVector.X);
-		AddControllerPitchInput(LookAxisVector.Y);
+		UCapsuleComponent* Capsule = GetCapsuleComponent();
+		if (Capsule)
+		{
+			float TorqueMultiplier = 15.0f; // Torque multiplier for AccelChange
+			// Yaw rotates around UpVector, Pitch rotates around RightVector
+			FVector Torque = GetActorUpVector() * LookAxisVector.X * TorqueMultiplier
+				+ GetActorRightVector() * LookAxisVector.Y * (-TorqueMultiplier); // Inverted Y for natural pitch
+
+			Capsule->AddTorqueInRadians(Torque, NAME_None, true); // true = bAccelChange (ignores mass)
+		}
+	}
+	else
+	{
+		if (Controller)
+		{
+			AddControllerYawInput(LookAxisVector.X);
+			AddControllerPitchInput(LookAxisVector.Y);
+		}
 	}
 }
 
@@ -150,5 +171,124 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 	if (GetCharacterMovement()->MovementMode == MOVE_Walking)
 	{
 		InputSubsystem->RemoveMappingContext(FlyingMappingContext);
+	}
+}
+
+void AUWCharacter::EnterSurfaceGravity()
+{
+	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+
+	// Read velocity from physics before turning it off
+	FVector PhysicsVelocity = Capsule->GetComponentVelocity();
+
+	Capsule->SetSimulatePhysics(false);
+
+	CMC->SetMovementMode(MOVE_Falling);
+	CMC->Velocity = PhysicsVelocity;
+	Thruster->bIsCharacterMode = true;
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bAutoManageActiveCameraTarget = true;
+	}
+	FirstPersonCameraComponent->bUsePawnControlRotation = true;
+
+	// Instant rotation correction to align Z-up with planet normal
+	// APlanet* NearestPlanet = nullptr;
+	// float MinDistSq = MAX_FLT;
+	// for (TActorIterator<APlanet> It(GetWorld()); It; ++It)
+	// {
+	// 	float DistSq = GetSquaredDistanceTo(*It);
+	// 	if (DistSq < MinDistSq)
+	// 	{
+	// 		MinDistSq = DistSq;
+	// 		NearestPlanet = *It;
+	// 	}
+	// }
+
+	// if (NearestPlanet)
+	// {
+	// 	FVector UpDirection = (GetActorLocation() - NearestPlanet->GetActorLocation()).GetSafeNormal();
+	// 	FVector ForwardDirection = GetActorForwardVector();
+	// 	FVector RightDirection = FVector::CrossProduct(UpDirection, ForwardDirection).GetSafeNormal();
+	// 	ForwardDirection = FVector::CrossProduct(RightDirection, UpDirection).GetSafeNormal();
+
+	// 	FRotator TargetRotation = FRotationMatrix::MakeFromXZ(ForwardDirection, UpDirection).Rotator();
+	// 	SetActorRotation(TargetRotation);
+
+	// 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	// 	{
+	// 		PC->SetControlRotation(TargetRotation);
+	// 	}
+	// }
+}
+
+void AUWCharacter::EnterZeroG()
+{
+	CurrentMovementState = ECharacterMovementState::ZeroG;
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+
+	FVector CMCVelocity = CMC->Velocity;
+
+	CMC->SetMovementMode(MOVE_None);
+	Thruster->bIsCharacterMode = false;
+
+	Capsule->SetSimulatePhysics(true);
+	Capsule->SetEnableGravity(false); // We handle custom forces if needed
+	Capsule->BodyInstance.bLockXRotation = false;
+	Capsule->BodyInstance.bLockYRotation = false;
+	Capsule->BodyInstance.bLockZRotation = false;
+
+	Capsule->SetPhysicsLinearVelocity(CMCVelocity);
+
+	FirstPersonCameraComponent->bUsePawnControlRotation = false;
+}
+
+void AUWCharacter::CheckInitialMovementState()
+{
+	APlanet* NearestPlanet = nullptr;
+	float MinDistSq = MAX_FLT;
+	for (TActorIterator<APlanet> It(GetWorld()); It; ++It)
+	{
+		float DistSq = GetSquaredDistanceTo(*It);
+		if (DistSq < MinDistSq)
+		{
+			MinDistSq = DistSq;
+			NearestPlanet = *It;
+		}
+	}
+
+	if (NearestPlanet)
+	{
+		float Dist = FMath::Sqrt(MinDistSq);
+		float HollowRadius = 0.0f;
+		float AtmosphereRadius = 0.0f;
+
+		if (NearestPlanet->HollowInnerSphere)
+		{
+			HollowRadius = NearestPlanet->HollowInnerSphere->GetScaledSphereRadius();
+		}
+		if (NearestPlanet->AtmosphereSphere)
+		{
+			AtmosphereRadius = NearestPlanet->AtmosphereSphere->GetScaledSphereRadius();
+		}
+
+		if (Dist < HollowRadius || Dist > AtmosphereRadius)
+		{
+			EnterZeroG();
+		}
+		else
+		{
+			EnterSurfaceGravity();
+		}
+	}
+	else
+	{
+		EnterZeroG();
 	}
 }
