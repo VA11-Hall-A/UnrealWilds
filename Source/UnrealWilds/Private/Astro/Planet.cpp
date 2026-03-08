@@ -5,6 +5,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/SceneComponent.h"
 #include "Character/UWCharacter.h"
+#include "Kismet/GameplayStatics.h"
 
 APlanet::APlanet()
 {
@@ -39,6 +40,11 @@ void APlanet::BeginPlay()
 	HollowInnerSphere->OnComponentEndOverlap.AddDynamic(this, &APlanet::OnHollowEndOverlap);
 	AtmosphereSphere->OnComponentBeginOverlap.AddDynamic(this, &APlanet::OnAtmosphereBeginOverlap);
 	AtmosphereSphere->OnComponentEndOverlap.AddDynamic(this, &APlanet::OnAtmosphereEndOverlap);
+
+	if (OrbitCenterClass)
+	{
+		OrbitCenterActor = Cast<ACelestialBody>(UGameplayStatics::GetActorOfClass(this, OrbitCenterClass));
+	}
 
 	if (OrbitCenterActor)
 	{
@@ -80,13 +86,31 @@ void APlanet::Tick(float DeltaTime)
 	}
 }
 
+FVector APlanet::GetOrbitalVelocity() const
+{
+	if (!OrbitCenterActor)
+	{
+		return FVector::ZeroVector;
+	}
+
+	float RadianAngle = FMath::DegreesToRadians(CurrentOrbitAngle);
+	float W = FMath::DegreesToRadians(OrbitSpeed);
+
+	// Velocity = derivative of Position
+	// X = Center.X + R * cos(wt) -> vX = -R * w * sin(wt)
+	// Y = Center.Y + R * sin(wt) -> vY =  R * w * cos(wt)
+	return FVector(-OrbitRadius * W * FMath::Sin(RadianAngle), 
+					OrbitRadius * W * FMath::Cos(RadianAngle), 
+					0.0f);
+}
+
 void APlanet::OnAtmosphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if (AUWCharacter* Character = Cast<AUWCharacter>(OtherActor))
 	{
 		if (Character->IsLocallyControlled())
 		{
-			Character->EnterSurfaceGravity();
+			Character->EnterSurfaceGravity(this);
 		}
 	}
 }
@@ -97,7 +121,7 @@ void APlanet::OnAtmosphereEndOverlap(UPrimitiveComponent* OverlappedComp, AActor
 	{
 		if (Character->IsLocallyControlled())
 		{
-			Character->EnterZeroG();
+			Character->EnterZeroG(nullptr);
 		}
 	}
 }
@@ -108,7 +132,7 @@ void APlanet::OnHollowBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* 
 	{
 		if (Character->IsLocallyControlled())
 		{
-			Character->EnterZeroG();
+			Character->EnterZeroG(this);
 		}
 	}
 }
@@ -119,7 +143,7 @@ void APlanet::OnHollowEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* Ot
 	{
 		if (Character->IsLocallyControlled())
 		{
-			Character->EnterSurfaceGravity();
+			Character->EnterSurfaceGravity(this);
 		}
 	}
 }

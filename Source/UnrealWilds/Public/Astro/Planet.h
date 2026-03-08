@@ -30,6 +30,9 @@ public:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly)
 	float AtmosphereSphereRadius = 35000.0f;
 
+	UFUNCTION(BlueprintCallable, Category = "Astro|Orbit")
+	FVector GetOrbitalVelocity() const;
+
 	UFUNCTION()
 	void OnAtmosphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
@@ -45,8 +48,12 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
-	// The actor this planet revolves around (e.g., a Sun)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Astro|Orbit")
+	// The class of the actor this planet revolves around
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Astro|Orbit")
+	TSubclassOf<class ACelestialBody> OrbitCenterClass;
+
+	// The actor this planet revolves around (found at runtime)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Astro|Orbit")
 	ACelestialBody* OrbitCenterActor;
 
 	// The speed of revolution (degrees per second)

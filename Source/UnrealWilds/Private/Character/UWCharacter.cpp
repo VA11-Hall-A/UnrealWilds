@@ -174,9 +174,15 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 	}
 }
 
-void AUWCharacter::EnterSurfaceGravity()
+void AUWCharacter::EnterSurfaceGravity(APlanet* Planet)
 {
 	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
+
+	if (Planet)
+	{
+		CurrentPlanet = Planet;
+		AttachToActor(CurrentPlanet, FAttachmentTransformRules::KeepWorldTransform);
+	}
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
@@ -226,9 +232,23 @@ void AUWCharacter::EnterSurfaceGravity()
 	// }
 }
 
-void AUWCharacter::EnterZeroG()
+void AUWCharacter::EnterZeroG(APlanet* Planet)
 {
 	CurrentMovementState = ECharacterMovementState::ZeroG;
+
+	// Store the current planet before we potentially clear it
+	APlanet* PreviousPlanet = CurrentPlanet;
+
+	if (Planet)
+	{
+		CurrentPlanet = Planet;
+		AttachToActor(CurrentPlanet, FAttachmentTransformRules::KeepWorldTransform);
+	}
+	else
+	{
+		CurrentPlanet = nullptr;
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	}
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
@@ -244,7 +264,13 @@ void AUWCharacter::EnterZeroG()
 	Capsule->BodyInstance.bLockYRotation = false;
 	Capsule->BodyInstance.bLockZRotation = false;
 
-	Capsule->SetPhysicsLinearVelocity(CMCVelocity);
+	FVector TotalVelocity = CMCVelocity;
+	if (!Planet && PreviousPlanet) 
+	{
+		// We just detached from a planet into deep space, keep orbital momentum!
+		TotalVelocity += PreviousPlanet->GetOrbitalVelocity();
+	}
+	Capsule->SetPhysicsLinearVelocity(TotalVelocity);
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
@@ -291,15 +317,15 @@ void AUWCharacter::CheckInitialMovementState()
 
 		if (Dist < HollowRadius || Dist > AtmosphereRadius)
 		{
-			EnterZeroG();
+			EnterZeroG(Dist < HollowRadius ? NearestPlanet : nullptr);
 		}
 		else
 		{
-			EnterSurfaceGravity();
+			EnterSurfaceGravity(NearestPlanet);
 		}
 	}
 	else
 	{
-		EnterZeroG();
+		EnterZeroG(nullptr);
 	}
 }

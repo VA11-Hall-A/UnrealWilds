@@ -29,10 +29,10 @@ public:
 	AUWCharacter(const FObjectInitializer& ObjectInitializer);
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void EnterSurfaceGravity();
+	void EnterSurfaceGravity(class APlanet* Planet = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void EnterZeroG();
+	void EnterZeroG(class APlanet* Planet = nullptr);
 
 	ECharacterMovementState GetCurrentMovementState() const;
 
@@ -44,6 +44,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	ECharacterMovementState CurrentMovementState = ECharacterMovementState::SurfaceGravity;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Planet")
+	class APlanet* CurrentPlanet;
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
