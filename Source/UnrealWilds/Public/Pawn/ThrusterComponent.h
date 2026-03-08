@@ -20,9 +20,11 @@ public:
 	void AddForceToMovemntComponent(FVector InputDirection);
 
 	UPROPERTY(EditAnywhere)
-	double ThrustForce = 0;
+	double ThrustForce = 100;
 	UPROPERTY(VisibleAnywhere)
 	bool bIsCharacterMode = true;
+	UPROPERTY()
+	double Mass;
 
 protected:
 	// Called when the game starts

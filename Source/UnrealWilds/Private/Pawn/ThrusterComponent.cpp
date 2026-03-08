@@ -6,6 +6,7 @@
 
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Math/UnitConversion.h"
 
 
 // Sets default values for this component's properties
@@ -14,7 +15,6 @@ UThrusterComponent::UThrusterComponent()
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = false;
-
 	// ...
 }
 
@@ -22,11 +22,11 @@ void UThrusterComponent::AddForceToMovemntComponent(FVector InputDirection)
 {
 	if (bIsCharacterMode)
 	{
-		MovementComponent->AddForce(InputDirection * ThrustForce * MovementComponent->Mass);
+		MovementComponent->AddForce(InputDirection * ThrustForce * Mass);
 	}
 	else
 	{
-		PrimitiveComponent->AddForce(InputDirection * ThrustForce);
+		PrimitiveComponent->AddForce(InputDirection * ThrustForce*Mass);
 	}
 }
 
@@ -49,6 +49,7 @@ void UThrusterComponent::BeginPlay()
 	if (ACharacter* Character = Cast<ACharacter>(OwnerActor))
 	{
 		MovementComponent = Character->GetCharacterMovement();
+		Mass=MovementComponent->Mass;
 	}
 	else
 	{

@@ -84,6 +84,13 @@ void UGravityWorldSubsystem::UpdateCMCGravities()
 {
 	if (CMComponent !=nullptr)
 	{
+		// 角色如果不受 CMC 控制（如在零重力模式下开启了物理模拟，MovementMode == MOVE_None)
+		// 则直接跳过由 CMC 施加引力和强制方向的逻辑。引力将由 Chaos AsyncCallback 自然接管。
+		if (CMComponent->MovementMode == MOVE_None)
+		{
+			return;
+		}
+
 		FVector AdditionalAcceleration = FVector::ZeroVector; 
 		for (auto& GravityAttractor: Sources)
 		{
@@ -157,6 +164,11 @@ void UGravityWorldSubsystem::UpdateCMCGravities()
 		DrawDebugString(GetWorld(), CMComponent->GetActorLocation(), * FString::Printf(TEXT("%.2f"), AdditionalAcceleration.Length()), nullptr, FColor::Red, 0, false, 1.0f  );
 		
 		CMComponent->AddForce(AdditionalAcceleration*CMComponent->Mass);
-		CMComponent->SetGravityDirection(AdditionalAcceleration.GetSafeNormal());
+		
+		// 只有当受引力影响时，才更改角色的重力方向和旋转，避免引力为 0 时 SetGravityDirection(0,0,0) 导致问题
+		if (!AdditionalAcceleration.IsNearlyZero())
+		{
+			CMComponent->SetGravityDirection(AdditionalAcceleration.GetSafeNormal());
+		}
 	}
 }
