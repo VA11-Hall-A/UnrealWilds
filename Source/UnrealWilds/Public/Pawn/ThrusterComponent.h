@@ -21,7 +21,7 @@ public:
 
 	UPROPERTY(EditAnywhere)
 	double ThrustForce = 0;
-	UPROPERTY(EditDefaultsOnly)
+	UPROPERTY(VisibleAnywhere)
 	bool bIsCharacterMode = true;
 
 protected:

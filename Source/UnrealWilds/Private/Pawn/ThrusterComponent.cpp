@@ -22,11 +22,11 @@ void UThrusterComponent::AddForceToMovemntComponent(FVector InputDirection)
 {
 	if (bIsCharacterMode)
 	{
-		MovementComponent->AddForce(InputDirection * ThrustForce);
+		MovementComponent->AddForce(InputDirection * ThrustForce * MovementComponent->Mass);
 	}
 	else
 	{
-		PrimitiveComponent->AddForce(InputDirection*ThrustForce);
+		PrimitiveComponent->AddForce(InputDirection * ThrustForce);
 	}
 }
 
@@ -35,7 +35,7 @@ void UThrusterComponent::AddForceToMovemntComponent(FVector InputDirection)
 void UThrusterComponent::BeginPlay()
 {
 	Super::BeginPlay();
- 
+
 	// Cache owner once for efficiency and readability
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor)
@@ -44,7 +44,7 @@ void UThrusterComponent::BeginPlay()
 		UE_LOG(LogTemp, Warning, TEXT("%s: Owner actor is null in BeginPlay"), *GetName());
 		return;
 	}
- 
+
 	// Attempt to cast owner to AUWCharacter to get movement component
 	if (ACharacter* Character = Cast<ACharacter>(OwnerActor))
 	{
@@ -54,7 +54,7 @@ void UThrusterComponent::BeginPlay()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("%s: Owner is not an AUWCharacter"), *GetName());
 	}
-    
+
 	// Get root component and cast to UPrimitiveComponent for physics or rendering
 	PrimitiveComponent = Cast<UPrimitiveComponent>(OwnerActor->GetRootComponent());
 	if (!PrimitiveComponent)
