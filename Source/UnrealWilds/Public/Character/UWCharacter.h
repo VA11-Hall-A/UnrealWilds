@@ -34,6 +34,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void EnterZeroG();
 
+	ECharacterMovementState GetCurrentMovementState() const;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;

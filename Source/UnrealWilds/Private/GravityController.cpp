@@ -1,16 +1,33 @@
 #include "GravityController.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Character/UWCharacter.h"
 
 void AGravityController::UpdateRotation(float DeltaTime)
 {
 	FVector GravityDirection = FVector::DownVector;
+	bool bIsZeroG = false;
+
 	if (ACharacter* PlayerCharacter = Cast<ACharacter>(GetPawn()))
 	{
 		if (UCharacterMovementComponent* MoveComp = PlayerCharacter->GetCharacterMovement())
 		{
 			GravityDirection = MoveComp->GetGravityDirection();
 		}
+
+		if (AUWCharacter* UWCharacter = Cast<AUWCharacter>(PlayerCharacter))
+		{
+			bIsZeroG = (UWCharacter->GetCurrentMovementState() == ECharacterMovementState::ZeroG);
+		}
+	}
+
+	if (bIsZeroG)
+	{
+		if (APawn* const P = GetPawnOrSpectator())
+		{
+			SetControlRotation(P->GetActorRotation());
+		}
+		return;
 	}
 
 	// Get the current control rotation in world space

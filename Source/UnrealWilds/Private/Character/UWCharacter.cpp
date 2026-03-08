@@ -115,7 +115,7 @@ void AUWCharacter::Look(const FInputActionValue& Value)
 			float TorqueMultiplier = 15.0f; // Torque multiplier for AccelChange
 			// Yaw rotates around UpVector, Pitch rotates around RightVector
 			FVector Torque = GetActorUpVector() * LookAxisVector.X * TorqueMultiplier
-				+ GetActorRightVector() * LookAxisVector.Y * (-TorqueMultiplier); // Inverted Y for natural pitch
+				+ GetActorRightVector() * LookAxisVector.Y * TorqueMultiplier; // Inverted Y for natural pitch
 
 			Capsule->AddTorqueInRadians(Torque, NAME_None, true); // true = bAccelChange (ignores mass)
 		}
@@ -246,7 +246,18 @@ void AUWCharacter::EnterZeroG()
 
 	Capsule->SetPhysicsLinearVelocity(CMCVelocity);
 
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bAutoManageActiveCameraTarget = true;
+	}
+
 	FirstPersonCameraComponent->bUsePawnControlRotation = false;
+	FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
+}
+
+ECharacterMovementState AUWCharacter::GetCurrentMovementState() const
+{
+	return CurrentMovementState;
 }
 
 void AUWCharacter::CheckInitialMovementState()
