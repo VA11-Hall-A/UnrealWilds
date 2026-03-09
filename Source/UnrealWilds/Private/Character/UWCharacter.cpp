@@ -93,15 +93,15 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		}
 		if (LaunchProbeAction)
 		{
-			EIC->BindAction(LaunchProbeAction, ETriggerEvent::Started, ProbeLauncher, &UProbeLauncherComponent::LaunchProbe);
+			EIC->BindAction(LaunchProbeAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::LaunchProbe);
 		}
 		if (RecallProbeAction)
 		{
-			EIC->BindAction(RecallProbeAction, ETriggerEvent::Started, ProbeLauncher, &UProbeLauncherComponent::RecallProbe);
+			EIC->BindAction(RecallProbeAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::RecallProbe);
 		}
 		if (InteractAction)
 		{
-			EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AUWCharacter::OnInteract);
+			EIC->BindAction(InteractAction, ETriggerEvent::Triggered, this, &AUWCharacter::OnInteract);
 		}
 	}
 }
@@ -316,7 +316,7 @@ FVector AUWCharacter::GetVelocity() const
 	}
 
 	// ZeroG: use physics velocity from capsule
-	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
 	{
 		return Capsule->GetPhysicsLinearVelocity() + OrbitalVelocity;
 	}

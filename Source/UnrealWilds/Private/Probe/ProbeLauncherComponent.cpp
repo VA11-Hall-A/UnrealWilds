@@ -47,6 +47,7 @@ void UProbeLauncherComponent::LaunchProbe()
 		const FVector InheritedVelocity = Owner->GetVelocity();
 		NewProbe->Launch(Direction, LaunchSpeed, InheritedVelocity);
 	}
+	UE_LOG(LogTemp, Warning, TEXT("Probe launched!"));
 }
 
 void UProbeLauncherComponent::RecallProbe()

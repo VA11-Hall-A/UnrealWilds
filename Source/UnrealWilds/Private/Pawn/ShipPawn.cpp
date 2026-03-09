@@ -70,15 +70,15 @@ void AShipPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 		}
 		if (LaunchProbeAction)
 		{
-			EIC->BindAction(LaunchProbeAction, ETriggerEvent::Started, ProbeLauncher, &UProbeLauncherComponent::LaunchProbe);
+			EIC->BindAction(LaunchProbeAction, ETriggerEvent::Triggered, ProbeLauncher.Get(), &UProbeLauncherComponent::LaunchProbe);
 		}
 		if (RecallProbeAction)
 		{
-			EIC->BindAction(RecallProbeAction, ETriggerEvent::Started, ProbeLauncher, &UProbeLauncherComponent::RecallProbe);
+			EIC->BindAction(RecallProbeAction, ETriggerEvent::Triggered, ProbeLauncher.Get(), &UProbeLauncherComponent::RecallProbe);
 		}
 		if (InteractAction)
 		{
-			EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AShipPawn::OnInteract);
+			EIC->BindAction(InteractAction, ETriggerEvent::Triggered, this, &AShipPawn::OnInteract);
 		}
 	}
 }
