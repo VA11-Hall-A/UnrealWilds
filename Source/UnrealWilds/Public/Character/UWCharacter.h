@@ -7,6 +7,7 @@
 #include "UWCharacter.generated.h"
 
 class UThrusterComponent;
+class UProbeLauncherComponent;
 class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
@@ -81,6 +82,15 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly)
 	UThrusterComponent* Thruster;
+
+	UPROPERTY(EditDefaultsOnly)
+	UProbeLauncherComponent* ProbeLauncher;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
+	TObjectPtr<UInputAction> LaunchProbeAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
+	TObjectPtr<UInputAction> RecallProbeAction;
 
 	virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode = 0) override;
 

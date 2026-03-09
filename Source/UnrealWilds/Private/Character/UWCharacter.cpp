@@ -14,6 +14,7 @@
 #include "Engine/Engine.h"
 #include "Gravity/GravityWorldSubsystem.h"
 #include "Pawn/ThrusterComponent.h"
+#include "Probe/ProbeLauncherComponent.h"
 #include "Astro/Planet.h"
 #include "EngineUtils.h"
 
@@ -33,6 +34,8 @@ inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer)
 	Thruster = CreateDefaultSubobject<UThrusterComponent>(TEXT("Thruster"));
 	Thruster->ThrustForce = 1000.0;
 	Thruster->bIsCharacterMode = true;
+
+	ProbeLauncher = CreateDefaultSubobject<UProbeLauncherComponent>(TEXT("ProbeLauncher"));
 }
 
 // Called when the game starts or when spawned
@@ -86,6 +89,14 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		if (FlyingMoveAction)
 		{
 			EIC->BindAction(FlyingMoveAction, ETriggerEvent::Triggered, this, &AUWCharacter::FlyingMove);
+		}
+		if (LaunchProbeAction)
+		{
+			EIC->BindAction(LaunchProbeAction, ETriggerEvent::Started, ProbeLauncher, &UProbeLauncherComponent::LaunchProbe);
+		}
+		if (RecallProbeAction)
+		{
+			EIC->BindAction(RecallProbeAction, ETriggerEvent::Started, ProbeLauncher, &UProbeLauncherComponent::RecallProbe);
 		}
 	}
 }
