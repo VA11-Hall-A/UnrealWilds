@@ -5,6 +5,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/SceneComponent.h"
 #include "Character/UWCharacter.h"
+#include "Pawn/ShipPawn.h"
 #include "Kismet/GameplayStatics.h"
 
 APlanet::APlanet()
@@ -113,6 +114,10 @@ void APlanet::OnAtmosphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AAct
 			Character->EnterSurfaceGravity(this);
 		}
 	}
+	else if (AShipPawn* Ship = Cast<AShipPawn>(OtherActor))
+	{
+		Ship->OnEnterPlanetGravity(this);
+	}
 }
 
 void APlanet::OnAtmosphereEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
@@ -123,6 +128,10 @@ void APlanet::OnAtmosphereEndOverlap(UPrimitiveComponent* OverlappedComp, AActor
 		{
 			Character->EnterZeroG(nullptr);
 		}
+	}
+	else if (AShipPawn* Ship = Cast<AShipPawn>(OtherActor))
+	{
+		Ship->OnExitPlanetGravity();
 	}
 }
 

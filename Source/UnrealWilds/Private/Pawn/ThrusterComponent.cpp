@@ -45,21 +45,21 @@ void UThrusterComponent::BeginPlay()
 		return;
 	}
 
-	// Attempt to cast owner to AUWCharacter to get movement component
-	if (ACharacter* Character = Cast<ACharacter>(OwnerActor))
-	{
-		MovementComponent = Character->GetCharacterMovement();
-		Mass=MovementComponent->Mass;
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s: Owner is not an AUWCharacter"), *GetName());
-	}
-
 	// Get root component and cast to UPrimitiveComponent for physics or rendering
 	PrimitiveComponent = Cast<UPrimitiveComponent>(OwnerActor->GetRootComponent());
 	if (!PrimitiveComponent)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("%s: Owner has no valid UPrimitiveComponent root"), *GetName());
+	}
+
+	// Attempt to cast owner to ACharacter to get movement component and mass
+	if (ACharacter* Character = Cast<ACharacter>(OwnerActor))
+	{
+		MovementComponent = Character->GetCharacterMovement();
+		Mass = MovementComponent->Mass;
+	}
+	else if (PrimitiveComponent)
+	{
+		Mass = PrimitiveComponent->GetMass();
 	}
 }

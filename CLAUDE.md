@@ -24,19 +24,28 @@ Follow UE coding conventions (U/A/F/E prefixes).
 - **SurfaceGravity**: CMC-driven, attached to planet.
 - **ZeroG**: Capsule physics simulation, torque-based rotation.
 
-Transitions triggered by APlanet sphere overlap events. `GetVelocity()` overridden to return world-space velocity including planet orbital velocity.
+Transitions triggered by APlanet sphere overlap events. `GetVelocity()` overridden to return world-space velocity including planet orbital velocity. Interact action finds nearby AShipPawn and calls `BoardShip()`. `PossessedBy` override restores DefaultMappingContext on re-possession.
 
 **UUWCharacterMovementComponent** (`Character/UWCharacterMovementComponent`) — Overrides `UpdateBasedMovement()` for planet-relative movement.
 
-**AGravityController** (`GravityController`) — Gravity-relative look input. ZeroG defers to physics rotation.
+**AGravityController** (`GravityController`) — Gravity-relative look input. ZeroG and non-character pawns (e.g. ship) defer to physics rotation.
 
-**UThrusterComponent** (`Pawn/ThrusterComponent`) — Directional force. Character mode (CMC) and physics mode (rigid body).
+**UThrusterComponent** (`Pawn/ThrusterComponent`) — Directional force. Character mode (CMC AddForce) and physics mode (rigid body AddForce). Mass auto-detected from CMC or root PrimitiveComponent.
+
+### Ship System
+
+**AShipPawn** (`Pawn/ShipPawn`) — Physics-driven spaceship (APawn). 6DOF movement identical to character ZeroG: torque-based rotation + thruster force. Components: UStaticMeshComponent root (SimulatePhysics, ECC_Pawn), UCameraComponent, UThrusterComponent (physics mode), UProbeLauncherComponent, USphereComponent (interaction zone).
+
+- **Boarding**: Character walks into InteractionZone overlap, presses Interact → `BoardShip()` hides character, Controller possesses ship. Ship Interact → `OnExitShip()` restores character, re-possesses, calls `CheckInitialMovementState`.
+- **Planet attachment**: APlanet AtmosphereSphere overlap triggers `OnEnterPlanetGravity()`/`OnExitPlanetGravity()` with AttachToActor/DetachFromActor and orbital velocity inheritance.
+- **GetVelocity()** overridden to return physics velocity + planet orbital velocity.
+- Input mapping context managed in `PossessedBy`/`UnPossessed`.
 
 ### Celestial Bodies
 
 **ACelestialBody** (`Astro/CelestialBody`) — Base actor with UGravitySourceComponent.
 
-**APlanet** (`Astro/Planet`) — Orbital mechanics, HollowInnerSphere (zero-g entry), AtmosphereSphere (surface gravity entry). `GetOrbitalVelocity()` for momentum inheritance.
+**APlanet** (`Astro/Planet`) — Orbital mechanics, HollowInnerSphere (zero-g entry), AtmosphereSphere (surface gravity entry for character, planet attachment for ship). `GetOrbitalVelocity()` for momentum inheritance.
 
 ---
 

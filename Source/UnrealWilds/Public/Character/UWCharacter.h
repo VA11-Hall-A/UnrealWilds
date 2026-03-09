@@ -11,6 +11,7 @@ class UProbeLauncherComponent;
 class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
+class AShipPawn;
 struct FInputActionValue;
 
 UENUM(BlueprintType)
@@ -39,11 +40,12 @@ public:
 
 	virtual FVector GetVelocity() const override;
 
+	void CheckInitialMovementState();
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-
-	void CheckInitialMovementState();
+	virtual void PossessedBy(AController* NewController) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	ECharacterMovementState CurrentMovementState = ECharacterMovementState::SurfaceGravity;
@@ -79,8 +81,9 @@ protected:
 
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
-	
+
 	void FlyingMove(const FInputActionValue& Value);
+	void OnInteract();
 
 	UPROPERTY(EditDefaultsOnly)
 	UThrusterComponent* Thruster;
@@ -93,6 +96,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
 	TObjectPtr<UInputAction> RecallProbeAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
+	TObjectPtr<UInputAction> InteractAction;
 
 	virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode = 0) override;
 

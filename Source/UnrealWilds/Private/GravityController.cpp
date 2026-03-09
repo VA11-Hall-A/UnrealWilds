@@ -8,7 +8,15 @@ void AGravityController::UpdateRotation(float DeltaTime)
 	FVector GravityDirection = FVector::DownVector;
 	bool bIsZeroG = false;
 
-	if (ACharacter* PlayerCharacter = Cast<ACharacter>(GetPawn()))
+	// Non-character pawn (e.g. ship): always use ZeroG-style rotation
+	APawn* CurrentPawn = GetPawn();
+	if (CurrentPawn && !Cast<ACharacter>(CurrentPawn))
+	{
+		SetControlRotation(CurrentPawn->GetActorRotation());
+		return;
+	}
+
+	if (ACharacter* PlayerCharacter = Cast<ACharacter>(CurrentPawn))
 	{
 		if (UCharacterMovementComponent* MoveComp = PlayerCharacter->GetCharacterMovement())
 		{

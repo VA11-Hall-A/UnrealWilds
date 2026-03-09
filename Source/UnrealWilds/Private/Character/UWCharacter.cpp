@@ -16,6 +16,7 @@
 #include "Pawn/ThrusterComponent.h"
 #include "Probe/ProbeLauncherComponent.h"
 #include "Astro/Planet.h"
+#include "Pawn/ShipPawn.h"
 #include "EngineUtils.h"
 
 // Sets default values
@@ -97,6 +98,10 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		if (RecallProbeAction)
 		{
 			EIC->BindAction(RecallProbeAction, ETriggerEvent::Started, ProbeLauncher, &UProbeLauncherComponent::RecallProbe);
+		}
+		if (InteractAction)
+		{
+			EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AUWCharacter::OnInteract);
 		}
 	}
 }
@@ -360,5 +365,40 @@ void AUWCharacter::CheckInitialMovementState()
 	else
 	{
 		EnterZeroG(nullptr);
+	}
+}
+
+void AUWCharacter::OnInteract()
+{
+	TArray<AActor*> OverlappingActors;
+	GetOverlappingActors(OverlappingActors, AShipPawn::StaticClass());
+
+	for (AActor* Actor : OverlappingActors)
+	{
+		if (AShipPawn* Ship = Cast<AShipPawn>(Actor))
+		{
+			if (!Ship->IsOccupied())
+			{
+				Ship->BoardShip(this);
+				return;
+			}
+		}
+	}
+}
+
+void AUWCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	if (APlayerController* PC = Cast<APlayerController>(NewController))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			if (DefaultMappingContext)
+			{
+				Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			}
+		}
 	}
 }
