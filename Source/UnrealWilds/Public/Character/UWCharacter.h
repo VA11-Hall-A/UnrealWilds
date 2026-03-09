@@ -37,6 +37,8 @@ public:
 
 	ECharacterMovementState GetCurrentMovementState() const;
 
+	virtual FVector GetVelocity() const override;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;

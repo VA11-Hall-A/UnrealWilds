@@ -297,6 +297,28 @@ ECharacterMovementState AUWCharacter::GetCurrentMovementState() const
 	return CurrentMovementState;
 }
 
+FVector AUWCharacter::GetVelocity() const
+{
+	FVector OrbitalVelocity = FVector::ZeroVector;
+	if (CurrentPlanet)
+	{
+		OrbitalVelocity = CurrentPlanet->GetOrbitalVelocity();
+	}
+
+	if (CurrentMovementState == ECharacterMovementState::SurfaceGravity)
+	{
+		return GetCharacterMovement()->Velocity + OrbitalVelocity;
+	}
+
+	// ZeroG: use physics velocity from capsule
+	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		return Capsule->GetPhysicsLinearVelocity() + OrbitalVelocity;
+	}
+
+	return Super::GetVelocity();
+}
+
 void AUWCharacter::CheckInitialMovementState()
 {
 	APlanet* NearestPlanet = nullptr;
