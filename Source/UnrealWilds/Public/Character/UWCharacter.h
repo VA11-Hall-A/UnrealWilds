@@ -8,9 +8,11 @@
 
 class UThrusterComponent;
 class UProbeLauncherComponent;
+class UPlanetAttachmentComponent;
 class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
+class APlanet;
 class AShipPawn;
 struct FInputActionValue;
 
@@ -31,10 +33,10 @@ public:
 	AUWCharacter(const FObjectInitializer& ObjectInitializer);
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void EnterSurfaceGravity(class APlanet* Planet = nullptr);
+	void EnterSurfaceGravity();
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void EnterZeroG(class APlanet* Planet = nullptr);
+	void EnterZeroG(FVector InheritedOrbitalVelocity = FVector::ZeroVector);
 
 	ECharacterMovementState GetCurrentMovementState() const;
 
@@ -51,7 +53,7 @@ protected:
 	ECharacterMovementState CurrentMovementState = ECharacterMovementState::SurfaceGravity;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Planet")
-	class APlanet* CurrentPlanet;
+	TObjectPtr<UPlanetAttachmentComponent> PlanetAttachment;
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -101,6 +103,12 @@ protected:
 	TObjectPtr<UInputAction> InteractAction;
 
 	virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode = 0) override;
+
+	UFUNCTION()
+	void OnAttachedToPlanet(APlanet* Planet);
+
+	UFUNCTION()
+	void OnDetachedFromPlanet(FVector OrbitalVelocity);
 
 	// ── Camera ──────────────────────────────────────────────────────────────
 

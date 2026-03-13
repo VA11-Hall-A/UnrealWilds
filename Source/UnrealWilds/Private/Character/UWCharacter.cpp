@@ -14,6 +14,7 @@
 #include "Engine/Engine.h"
 #include "Gravity/GravityWorldSubsystem.h"
 #include "Pawn/ThrusterComponent.h"
+#include "Pawn/PlanetAttachmentComponent.h"
 #include "Probe/ProbeLauncherComponent.h"
 #include "Astro/Planet.h"
 #include "Pawn/ShipPawn.h"
@@ -37,6 +38,9 @@ inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer)
 	Thruster->bIsCharacterMode = true;
 
 	ProbeLauncher = CreateDefaultSubobject<UProbeLauncherComponent>(TEXT("ProbeLauncher"));
+
+	PlanetAttachment = CreateDefaultSubobject<UPlanetAttachmentComponent>(TEXT("PlanetAttachment"));
+	PlanetAttachment->Initialize(GetCapsuleComponent());
 }
 
 // Called when the game starts or when spawned
@@ -64,6 +68,10 @@ void AUWCharacter::BeginPlay()
 			UE_LOG(LogTemp, Warning, TEXT("Character Registered to Subsystem!"));
 		}
 	}
+
+	// Bind planet attachment delegates
+	PlanetAttachment->OnAttachedToPlanet.AddDynamic(this, &AUWCharacter::OnAttachedToPlanet);
+	PlanetAttachment->OnDetachedFromPlanet.AddDynamic(this, &AUWCharacter::OnDetachedFromPlanet);
 
 	CheckInitialMovementState();
 }
@@ -190,15 +198,9 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 	}
 }
 
-void AUWCharacter::EnterSurfaceGravity(APlanet* Planet)
+void AUWCharacter::EnterSurfaceGravity()
 {
 	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
-
-	if (Planet)
-	{
-		CurrentPlanet = Planet;
-		AttachToActor(CurrentPlanet, FAttachmentTransformRules::KeepWorldTransform);
-	}
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
@@ -217,54 +219,11 @@ void AUWCharacter::EnterSurfaceGravity(APlanet* Planet)
 		PC->bAutoManageActiveCameraTarget = true;
 	}
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
-
-	// Instant rotation correction to align Z-up with planet normal
-	// APlanet* NearestPlanet = nullptr;
-	// float MinDistSq = MAX_FLT;
-	// for (TActorIterator<APlanet> It(GetWorld()); It; ++It)
-	// {
-	// 	float DistSq = GetSquaredDistanceTo(*It);
-	// 	if (DistSq < MinDistSq)
-	// 	{
-	// 		MinDistSq = DistSq;
-	// 		NearestPlanet = *It;
-	// 	}
-	// }
-
-	// if (NearestPlanet)
-	// {
-	// 	FVector UpDirection = (GetActorLocation() - NearestPlanet->GetActorLocation()).GetSafeNormal();
-	// 	FVector ForwardDirection = GetActorForwardVector();
-	// 	FVector RightDirection = FVector::CrossProduct(UpDirection, ForwardDirection).GetSafeNormal();
-	// 	ForwardDirection = FVector::CrossProduct(RightDirection, UpDirection).GetSafeNormal();
-
-	// 	FRotator TargetRotation = FRotationMatrix::MakeFromXZ(ForwardDirection, UpDirection).Rotator();
-	// 	SetActorRotation(TargetRotation);
-
-	// 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	// 	{
-	// 		PC->SetControlRotation(TargetRotation);
-	// 	}
-	// }
 }
 
-void AUWCharacter::EnterZeroG(APlanet* Planet)
+void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 {
 	CurrentMovementState = ECharacterMovementState::ZeroG;
-
-	// Store the current planet before we potentially clear it
-	APlanet* PreviousPlanet = CurrentPlanet;
-
-	if (Planet)
-	{
-		CurrentPlanet = Planet;
-		AttachToActor(CurrentPlanet, FAttachmentTransformRules::KeepWorldTransform);
-	}
-	else
-	{
-		CurrentPlanet = nullptr;
-		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-	}
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
@@ -280,12 +239,7 @@ void AUWCharacter::EnterZeroG(APlanet* Planet)
 	Capsule->BodyInstance.bLockYRotation = false;
 	Capsule->BodyInstance.bLockZRotation = false;
 
-	FVector TotalVelocity = CMCVelocity;
-	if (!Planet && PreviousPlanet) 
-	{
-		// We just detached from a planet into deep space, keep orbital momentum!
-		TotalVelocity += PreviousPlanet->GetOrbitalVelocity();
-	}
+	FVector TotalVelocity = CMCVelocity + InheritedOrbitalVelocity;
 	Capsule->SetPhysicsLinearVelocity(TotalVelocity);
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -304,11 +258,7 @@ ECharacterMovementState AUWCharacter::GetCurrentMovementState() const
 
 FVector AUWCharacter::GetVelocity() const
 {
-	FVector OrbitalVelocity = FVector::ZeroVector;
-	if (CurrentPlanet)
-	{
-		OrbitalVelocity = CurrentPlanet->GetOrbitalVelocity();
-	}
+	FVector OrbitalVelocity = PlanetAttachment->GetOrbitalVelocity();
 
 	if (CurrentMovementState == ECharacterMovementState::SurfaceGravity)
 	{
@@ -326,45 +276,29 @@ FVector AUWCharacter::GetVelocity() const
 
 void AUWCharacter::CheckInitialMovementState()
 {
-	APlanet* NearestPlanet = nullptr;
-	float MinDistSq = MAX_FLT;
-	for (TActorIterator<APlanet> It(GetWorld()); It; ++It)
+	// Let the component find and attach to the nearest planet (may trigger OnAttachedToPlanet → EnterSurfaceGravity)
+	PlanetAttachment->CheckInitialPlanetState();
+
+	APlanet* Planet = PlanetAttachment->GetCurrentPlanet();
+	if (Planet)
 	{
-		float DistSq = GetSquaredDistanceTo(*It);
-		if (DistSq < MinDistSq)
+		// Check if inside hollow sphere → override to ZeroG
+		if (Planet->HollowInnerSphere)
 		{
-			MinDistSq = DistSq;
-			NearestPlanet = *It;
+			float Dist = FVector::Dist(GetActorLocation(), Planet->GetActorLocation());
+			float HollowRadius = Planet->HollowInnerSphere->GetScaledSphereRadius();
+			if (Dist < HollowRadius)
+			{
+				EnterZeroG();
+				return;
+			}
 		}
-	}
-
-	if (NearestPlanet)
-	{
-		float Dist = FMath::Sqrt(MinDistSq);
-		float HollowRadius = 0.0f;
-		float AtmosphereRadius = 0.0f;
-
-		if (NearestPlanet->HollowInnerSphere)
-		{
-			HollowRadius = NearestPlanet->HollowInnerSphere->GetScaledSphereRadius();
-		}
-		if (NearestPlanet->AtmosphereSphere)
-		{
-			AtmosphereRadius = NearestPlanet->AtmosphereSphere->GetScaledSphereRadius();
-		}
-
-		if (Dist < HollowRadius || Dist > AtmosphereRadius)
-		{
-			EnterZeroG(Dist < HollowRadius ? NearestPlanet : nullptr);
-		}
-		else
-		{
-			EnterSurfaceGravity(NearestPlanet);
-		}
+		// Otherwise the delegate already set SurfaceGravity, nothing more to do
 	}
 	else
 	{
-		EnterZeroG(nullptr);
+		// Not near any planet → ZeroG in deep space
+		EnterZeroG();
 	}
 }
 
@@ -401,4 +335,24 @@ void AUWCharacter::PossessedBy(AController* NewController)
 			}
 		}
 	}
+}
+
+// ── Planet Attachment Delegates ─────────────────────────────────────────────
+
+void AUWCharacter::OnAttachedToPlanet(APlanet* Planet)
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+	EnterSurfaceGravity();
+}
+
+void AUWCharacter::OnDetachedFromPlanet(FVector OrbitalVelocity)
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+	EnterZeroG(OrbitalVelocity);
 }

@@ -5,7 +5,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/SceneComponent.h"
 #include "Character/UWCharacter.h"
-#include "Pawn/ShipPawn.h"
+#include "Pawn/PlanetAttachmentComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 APlanet::APlanet()
@@ -107,31 +107,17 @@ FVector APlanet::GetOrbitalVelocity() const
 
 void APlanet::OnAtmosphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (AUWCharacter* Character = Cast<AUWCharacter>(OtherActor))
+	if (UPlanetAttachmentComponent* Attachment = OtherActor->FindComponentByClass<UPlanetAttachmentComponent>())
 	{
-		if (Character->IsLocallyControlled())
-		{
-			Character->EnterSurfaceGravity(this);
-		}
-	}
-	else if (AShipPawn* Ship = Cast<AShipPawn>(OtherActor))
-	{
-		Ship->OnEnterPlanetGravity(this);
+		Attachment->AttachToPlanet(this);
 	}
 }
 
 void APlanet::OnAtmosphereEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (AUWCharacter* Character = Cast<AUWCharacter>(OtherActor))
+	if (UPlanetAttachmentComponent* Attachment = OtherActor->FindComponentByClass<UPlanetAttachmentComponent>())
 	{
-		if (Character->IsLocallyControlled())
-		{
-			Character->EnterZeroG(nullptr);
-		}
-	}
-	else if (AShipPawn* Ship = Cast<AShipPawn>(OtherActor))
-	{
-		Ship->OnExitPlanetGravity();
+		Attachment->DetachFromPlanet();
 	}
 }
 
@@ -141,7 +127,7 @@ void APlanet::OnHollowBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* 
 	{
 		if (Character->IsLocallyControlled())
 		{
-			Character->EnterZeroG(this);
+			Character->EnterZeroG();
 		}
 	}
 }
@@ -152,7 +138,7 @@ void APlanet::OnHollowEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* Ot
 	{
 		if (Character->IsLocallyControlled())
 		{
-			Character->EnterSurfaceGravity(this);
+			Character->EnterSurfaceGravity();
 		}
 	}
 }

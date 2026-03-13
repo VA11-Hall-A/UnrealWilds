@@ -8,10 +8,10 @@ class UStaticMeshComponent;
 class UCameraComponent;
 class UThrusterComponent;
 class UProbeLauncherComponent;
+class UPlanetAttachmentComponent;
 class USphereComponent;
 class UInputMappingContext;
 class UInputAction;
-class APlanet;
 class AUWCharacter;
 struct FInputActionValue;
 
@@ -27,9 +27,6 @@ public:
 
 	void BoardShip(AUWCharacter* Character);
 	void OnExitShip();
-
-	void OnEnterPlanetGravity(APlanet* Planet);
-	void OnExitPlanetGravity();
 
 	bool IsOccupied() const { return StoredCharacter != nullptr; }
 
@@ -56,10 +53,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ship|Interaction")
 	TObjectPtr<USphereComponent> InteractionZone;
 
-	// ── State ───────────────────────────────────────────────────────────────
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Ship")
+	TObjectPtr<UPlanetAttachmentComponent> PlanetAttachment;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Ship")
-	TObjectPtr<APlanet> CurrentPlanet;
+	// ── State ───────────────────────────────────────────────────────────────
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Ship")
 	TObjectPtr<AUWCharacter> StoredCharacter;
@@ -93,8 +90,6 @@ private:
 	void ShipLook(const FInputActionValue& Value);
 	void ShipFlyingMove(const FInputActionValue& Value);
 	void OnInteract();
-
-	void CheckInitialPlanetState();
 
 	UFUNCTION()
 	void OnInteractionZoneBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,

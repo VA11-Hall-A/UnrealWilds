@@ -7,10 +7,9 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Pawn/ThrusterComponent.h"
+#include "Pawn/PlanetAttachmentComponent.h"
 #include "Probe/ProbeLauncherComponent.h"
 #include "Character/UWCharacter.h"
-#include "Astro/Planet.h"
-#include "EngineUtils.h"
 
 AShipPawn::AShipPawn()
 {
@@ -46,12 +45,16 @@ AShipPawn::AShipPawn()
 	InteractionZone->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionZone->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	InteractionZone->SetGenerateOverlapEvents(true);
+
+	// Planet attachment component
+	PlanetAttachment = CreateDefaultSubobject<UPlanetAttachmentComponent>(TEXT("PlanetAttachment"));
+	PlanetAttachment->Initialize(ShipMesh);
 }
 
 void AShipPawn::BeginPlay()
 {
 	Super::BeginPlay();
-	CheckInitialPlanetState();
+	PlanetAttachment->CheckInitialPlanetState();
 }
 
 void AShipPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -205,76 +208,16 @@ void AShipPawn::OnExitShip()
 	Character->CheckInitialMovementState();
 }
 
-// ── Planet Gravity ──────────────────────────────────────────────────────────
-
-void AShipPawn::OnEnterPlanetGravity(APlanet* Planet)
-{
-	if (!Planet)
-	{
-		return;
-	}
-
-	CurrentPlanet = Planet;
-	AttachToActor(Planet, FAttachmentTransformRules::KeepWorldTransform);
-}
-
-void AShipPawn::OnExitPlanetGravity()
-{
-	if (!CurrentPlanet)
-	{
-		return;
-	}
-
-	// Read current physics velocity and add orbital velocity for momentum inheritance
-	FVector PhysicsVelocity = ShipMesh->GetPhysicsLinearVelocity();
-	FVector OrbitalVelocity = CurrentPlanet->GetOrbitalVelocity();
-
-	CurrentPlanet = nullptr;
-	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-
-	ShipMesh->SetPhysicsLinearVelocity(PhysicsVelocity + OrbitalVelocity);
-}
+// ── Velocity ────────────────────────────────────────────────────────────────
 
 FVector AShipPawn::GetVelocity() const
 {
 	FVector PhysicsVelocity = ShipMesh ? ShipMesh->GetPhysicsLinearVelocity() : FVector::ZeroVector;
-
-	if (CurrentPlanet)
-	{
-		PhysicsVelocity += CurrentPlanet->GetOrbitalVelocity();
-	}
-
+	PhysicsVelocity += PlanetAttachment->GetOrbitalVelocity();
 	return PhysicsVelocity;
 }
 
-// ── Initial State ───────────────────────────────────────────────────────────
-
-void AShipPawn::CheckInitialPlanetState()
-{
-	APlanet* NearestPlanet = nullptr;
-	float MinDistSq = MAX_FLT;
-
-	for (TActorIterator<APlanet> It(GetWorld()); It; ++It)
-	{
-		float DistSq = FVector::DistSquared(GetActorLocation(), It->GetActorLocation());
-		if (DistSq < MinDistSq)
-		{
-			MinDistSq = DistSq;
-			NearestPlanet = *It;
-		}
-	}
-
-	if (NearestPlanet && NearestPlanet->AtmosphereSphere)
-	{
-		float Dist = FMath::Sqrt(MinDistSq);
-		float AtmosphereRadius = NearestPlanet->AtmosphereSphere->GetScaledSphereRadius();
-
-		if (Dist < AtmosphereRadius)
-		{
-			OnEnterPlanetGravity(NearestPlanet);
-		}
-	}
-}
+// ── Interaction Zone ────────────────────────────────────────────────────────
 
 void AShipPawn::OnInteractionZoneBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
