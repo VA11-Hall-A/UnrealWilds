@@ -205,18 +205,44 @@ void AUWCharacter::EnterSurfaceGravity()
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
 
+	// Record camera world transform before state change
+	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
+
 	// Read velocity from physics before turning it off
 	FVector PhysicsVelocity = Capsule->GetComponentVelocity();
 
 	Capsule->SetSimulatePhysics(false);
-
+	
 	CMC->SetMovementMode(MOVE_Falling);
 	CMC->Velocity = PhysicsVelocity;
 	Thruster->bIsCharacterMode = true;
 
+	// Calculate new upright body rotation based on gravity direction and camera yaw
+	FVector NewUpVector = GetActorUpVector();
+	if (APlanet* Planet = PlanetAttachment->GetCurrentPlanet())
+	{
+		NewUpVector = (GetActorLocation() - Planet->GetActorLocation()).GetSafeNormal();
+	}
+	
+	FVector CameraForward = CameraRotation.Vector();
+	FVector NewRight = FVector::CrossProduct(NewUpVector, CameraForward).GetSafeNormal();
+	if (NewRight.IsNearlyZero()) // Fallback if looking straight up/down
+	{
+		NewRight = FVector::CrossProduct(NewUpVector, GetActorForwardVector()).GetSafeNormal();
+	}
+	FVector NewForward = FVector::CrossProduct(NewRight, NewUpVector).GetSafeNormal();
+	FRotator NewActorRotation = FRotationMatrix::MakeFromXZ(NewForward, NewUpVector).Rotator();
+
+	// Offset actor location so the camera world position remains exactly the same
+	FVector LocalCameraOffset = FirstPersonCameraComponent->GetRelativeLocation();
+	FVector NewActorLocation = CameraLocation - NewActorRotation.RotateVector(LocalCameraOffset);
+	SetActorLocationAndRotation(NewActorLocation, NewActorRotation, false, nullptr, ETeleportType::TeleportPhysics);
+
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		PC->bAutoManageActiveCameraTarget = true;
+		PC->SetControlRotation(CameraRotation);
 	}
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 }
@@ -230,8 +256,18 @@ void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 
 	FVector CMCVelocity = CMC->Velocity;
 
+	// Record camera world transform before state change
+	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
+
 	CMC->SetMovementMode(MOVE_None);
 	Thruster->bIsCharacterMode = false;
+
+	// Align character body to camera's facing direction, and offset position
+	// so the camera stays in exactly the same world location.
+	FVector LocalCameraOffset = FirstPersonCameraComponent->GetRelativeLocation();
+	FVector NewActorLocation = CameraLocation - CameraRotation.RotateVector(LocalCameraOffset);
+	SetActorLocationAndRotation(NewActorLocation, CameraRotation, false, nullptr, ETeleportType::TeleportPhysics);
 
 	Capsule->SetSimulatePhysics(true);
 	Capsule->SetEnableGravity(false); // We handle custom forces if needed
@@ -245,6 +281,7 @@ void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		PC->bAutoManageActiveCameraTarget = true;
+		PC->SetControlRotation(CameraRotation);
 	}
 
 	FirstPersonCameraComponent->bUsePawnControlRotation = false;
