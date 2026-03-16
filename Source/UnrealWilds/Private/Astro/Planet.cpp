@@ -7,24 +7,26 @@
 #include "Character/UWCharacter.h"
 #include "Pawn/PlanetAttachmentComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Gravity/GravitySourceComponent.h"
 
 APlanet::APlanet()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
+	
+	UE_LOG(LogTemp,Warning,TEXT("%s"),*RootComponent.GetName())
 	HollowInnerSphere = CreateDefaultSubobject<USphereComponent>(TEXT("HollowInnerSphere"));
-	HollowInnerSphere->SetupAttachment(RootComponent);
+	HollowInnerSphere->SetupAttachment(GetRootComponent());
 	HollowInnerSphere->SetSphereRadius(5000.0f);
 	HollowInnerSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	HollowInnerSphere->SetCollisionObjectType(ECC_WorldStatic);
+	HollowInnerSphere->SetCollisionObjectType(ECC_WorldDynamic);
 	HollowInnerSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	HollowInnerSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
 	AtmosphereSphere = CreateDefaultSubobject<USphereComponent>(TEXT("AtmosphereSphere"));
-	AtmosphereSphere->SetupAttachment(RootComponent);
+	AtmosphereSphere->SetupAttachment(GetRootComponent());
 	AtmosphereSphere->SetSphereRadius(15000.0f);
 	AtmosphereSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	AtmosphereSphere->SetCollisionObjectType(ECC_WorldStatic);
+	AtmosphereSphere->SetCollisionObjectType(ECC_WorldDynamic);
 	AtmosphereSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	AtmosphereSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 }

@@ -22,7 +22,6 @@ void UPlanetAttachmentComponent::AttachToPlanet(APlanet* Planet)
 	}
 
 	CurrentPlanet = Planet;
-	GetOwner()->AttachToActor(Planet, FAttachmentTransformRules::KeepWorldTransform);
 
 	OnAttachedToPlanet.Broadcast(Planet);
 }
@@ -45,7 +44,6 @@ void UPlanetAttachmentComponent::DetachFromPlanet()
 	}
 
 	CurrentPlanet = nullptr;
-	GetOwner()->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
 	if (bWasSimulatingPhysics)
 	{

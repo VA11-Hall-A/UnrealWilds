@@ -48,4 +48,6 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly)
 	TObjectPtr<UCharacterMovementComponent> CMComponent = nullptr;
+
+	float TimeSinceLastOriginRebase = 0.0f;
 };
