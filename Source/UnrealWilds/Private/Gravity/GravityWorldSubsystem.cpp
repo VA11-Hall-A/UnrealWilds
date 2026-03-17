@@ -55,7 +55,16 @@ void UGravityWorldSubsystem::Tick(float DeltaTime)
 				if (UWorld* World = GetWorld())
 				{
 					// RequestNewWorldOrigin在帧末尾安全地将世界原点平移到玩家所在坐标
-					World->RequestNewWorldOrigin(FIntVector(ActorLoc.X, ActorLoc.Y, ActorLoc.Z) + World->OriginLocation);
+					World->SetNewWorldOrigin(FIntVector(ActorLoc.X, ActorLoc.Y, ActorLoc.Z) + World->OriginLocation);
+					if (GEngine)
+					{
+						GEngine->AddOnScreenDebugMessage(
+							-1,              // Key: -1 表示每次都创建新消息，不覆盖旧的
+							5.0f,            // Duration: 显示时长（秒）
+							FColor::Yellow,  // Color: 文本颜色
+							TEXT("Hello World! This is a screen log.") // 消息内容
+						);
+					}
 				}
 			}
 		}

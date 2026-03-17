@@ -22,7 +22,7 @@ void UPlanetAttachmentComponent::AttachToPlanet(APlanet* Planet)
 	}
 
 	CurrentPlanet = Planet;
-
+	// GetOwner()->AttachToActor(Planet, FAttachmentTransformRules::KeepWorldTransform);
 	OnAttachedToPlanet.Broadcast(Planet);
 }
 
@@ -49,7 +49,7 @@ void UPlanetAttachmentComponent::DetachFromPlanet()
 	{
 		PhysicsPrimitive->SetPhysicsLinearVelocity(PhysicsVelocity + OrbitalVelocity);
 	}
-
+	// GetOwner()->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	OnDetachedFromPlanet.Broadcast(OrbitalVelocity);
 }
 
@@ -91,6 +91,7 @@ void UPlanetAttachmentComponent::CheckInitialPlanetState()
 		if (Dist < AtmosphereRadius)
 		{
 			AttachToPlanet(NearestPlanet);
+			PhysicsPrimitive->SetPhysicsLinearVelocity(GetOrbitalVelocity());
 		}
 	}
 }

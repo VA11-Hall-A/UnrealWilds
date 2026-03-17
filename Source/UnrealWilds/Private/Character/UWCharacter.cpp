@@ -190,6 +190,7 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 	if (PrevMovementMode == MOVE_Walking)
 	{
 		InputSubsystem->AddMappingContext(FlyingMappingContext, 1);
+		GetCharacterMovement()->Velocity+=PlanetAttachment->GetOrbitalVelocity();
 		return;
 	}
 	if (GetCharacterMovement()->MovementMode == MOVE_Walking)
@@ -328,6 +329,10 @@ void AUWCharacter::CheckInitialMovementState()
 			{
 				EnterZeroG();
 				return;
+			}
+			else
+			{
+				EnterSurfaceGravity();
 			}
 		}
 		// Otherwise the delegate already set SurfaceGravity, nothing more to do

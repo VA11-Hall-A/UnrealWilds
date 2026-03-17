@@ -213,7 +213,7 @@ void AShipPawn::OnExitShip()
 FVector AShipPawn::GetVelocity() const
 {
 	FVector PhysicsVelocity = ShipMesh ? ShipMesh->GetPhysicsLinearVelocity() : FVector::ZeroVector;
-	PhysicsVelocity += PlanetAttachment->GetOrbitalVelocity();
+	// PhysicsVelocity += PlanetAttachment->GetOrbitalVelocity();
 	return PhysicsVelocity;
 }
 
