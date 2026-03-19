@@ -48,15 +48,19 @@ void AUWCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Add the default mapping context to the local player's Enhanced Input subsystem
+	// Add the common and foot mapping contexts (initial state: surface walking)
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
 			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 		{
-			if (DefaultMappingContext)
+			if (CommonMappingContext)
 			{
-				Subsystem->AddMappingContext(DefaultMappingContext, 0);
+				Subsystem->AddMappingContext(CommonMappingContext, 0);
+			}
+			if (FootMappingContext)
+			{
+				Subsystem->AddMappingContext(FootMappingContext, 1);
 			}
 		}
 	}
@@ -99,6 +103,10 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		{
 			EIC->BindAction(FlyingMoveAction, ETriggerEvent::Triggered, this, &AUWCharacter::FlyingMove);
 		}
+		if (RollAction)
+		{
+			EIC->BindAction(RollAction, ETriggerEvent::Triggered, this, &AUWCharacter::Roll);
+		}
 		if (LaunchProbeAction)
 		{
 			EIC->BindAction(LaunchProbeAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::LaunchProbe);
@@ -106,6 +114,14 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		if (RecallProbeAction)
 		{
 			EIC->BindAction(RecallProbeAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::RecallProbe);
+		}
+		if (RotateProbeCameraAction)
+		{
+			EIC->BindAction(RotateProbeCameraAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::RotateProbeCamera);
+		}
+		if (CaptureProbePhotoAction)
+		{
+			EIC->BindAction(CaptureProbePhotoAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::CaptureProbePhoto);
 		}
 		if (InteractAction)
 		{
@@ -164,6 +180,18 @@ void AUWCharacter::FlyingMove(const FInputActionValue& Value)
 	}
 }
 
+void AUWCharacter::Roll(const FInputActionValue& Value)
+{
+	float RollValue = Value.Get<float>();
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	if (Capsule)
+	{
+		float TorqueMultiplier = 15.0f;
+		FVector Torque = GetActorForwardVector() * RollValue * TorqueMultiplier;
+		Capsule->AddTorqueInRadians(Torque, NAME_None, true);
+	}
+}
+
 void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
 {
 	Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
@@ -189,13 +217,18 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 
 	if (PrevMovementMode == MOVE_Walking)
 	{
-		InputSubsystem->AddMappingContext(FlyingMappingContext, 1);
-		GetCharacterMovement()->Velocity+=PlanetAttachment->GetOrbitalVelocity();
+		// Left ground: swap Foot → Thrust
+		InputSubsystem->RemoveMappingContext(FootMappingContext);
+		InputSubsystem->AddMappingContext(ThrustMappingContext, 1);
+		GetCharacterMovement()->Velocity += PlanetAttachment->GetOrbitalVelocity();
 		return;
 	}
 	if (GetCharacterMovement()->MovementMode == MOVE_Walking)
 	{
-		InputSubsystem->RemoveMappingContext(FlyingMappingContext);
+		// Landed: swap Thrust → Foot, also remove Roll in case we came from ZeroG
+		InputSubsystem->RemoveMappingContext(ThrustMappingContext);
+		InputSubsystem->RemoveMappingContext(RollMappingContext);
+		InputSubsystem->AddMappingContext(FootMappingContext, 1);
 	}
 }
 
@@ -244,6 +277,13 @@ void AUWCharacter::EnterSurfaceGravity()
 	{
 		PC->bAutoManageActiveCameraTarget = true;
 		PC->SetControlRotation(CameraRotation);
+
+		// Remove roll input when entering surface gravity
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->RemoveMappingContext(RollMappingContext);
+		}
 	}
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 }
@@ -283,6 +323,13 @@ void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 	{
 		PC->bAutoManageActiveCameraTarget = true;
 		PC->SetControlRotation(CameraRotation);
+
+		// Enable roll input in zero-g
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(RollMappingContext, 2);
+		}
 	}
 
 	FirstPersonCameraComponent->bUsePawnControlRotation = false;
@@ -371,9 +418,13 @@ void AUWCharacter::PossessedBy(AController* NewController)
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
 			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 		{
-			if (DefaultMappingContext)
+			if (CommonMappingContext)
 			{
-				Subsystem->AddMappingContext(DefaultMappingContext, 0);
+				Subsystem->AddMappingContext(CommonMappingContext, 0);
+			}
+			if (FootMappingContext)
+			{
+				Subsystem->AddMappingContext(FootMappingContext, 1);
 			}
 		}
 	}

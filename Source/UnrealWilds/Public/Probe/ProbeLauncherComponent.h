@@ -7,6 +7,9 @@
 #include "ProbeLauncherComponent.generated.h"
 
 class AProbe;
+class UTextureRenderTarget2D;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhotoCaptured, UTextureRenderTarget2D*, RenderTarget);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class UNREALWILDS_API UProbeLauncherComponent : public UActorComponent
@@ -24,6 +27,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Probe")
 	AProbe* GetActiveProbe() const;
+
+	UFUNCTION(BlueprintCallable, Category="Probe|Camera")
+	void RotateProbeCamera();
+
+	UFUNCTION(BlueprintCallable, Category="Probe|Camera")
+	void CaptureProbePhoto();
+
+	UPROPERTY(BlueprintAssignable, Category="Probe|Camera")
+	FOnPhotoCaptured OnPhotoCaptured;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Probe")

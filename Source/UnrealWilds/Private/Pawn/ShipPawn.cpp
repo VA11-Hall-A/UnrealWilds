@@ -71,6 +71,10 @@ void AShipPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 		{
 			EIC->BindAction(FlyingMoveAction, ETriggerEvent::Triggered, this, &AShipPawn::ShipFlyingMove);
 		}
+		if (RollAction)
+		{
+			EIC->BindAction(RollAction, ETriggerEvent::Triggered, this, &AShipPawn::ShipRoll);
+		}
 		if (LaunchProbeAction)
 		{
 			EIC->BindAction(LaunchProbeAction, ETriggerEvent::Triggered, ProbeLauncher.Get(), &UProbeLauncherComponent::LaunchProbe);
@@ -78,6 +82,14 @@ void AShipPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 		if (RecallProbeAction)
 		{
 			EIC->BindAction(RecallProbeAction, ETriggerEvent::Triggered, ProbeLauncher.Get(), &UProbeLauncherComponent::RecallProbe);
+		}
+		if (RotateProbeCameraAction)
+		{
+			EIC->BindAction(RotateProbeCameraAction, ETriggerEvent::Triggered, ProbeLauncher.Get(), &UProbeLauncherComponent::RotateProbeCamera);
+		}
+		if (CaptureProbePhotoAction)
+		{
+			EIC->BindAction(CaptureProbePhotoAction, ETriggerEvent::Triggered, ProbeLauncher.Get(), &UProbeLauncherComponent::CaptureProbePhoto);
 		}
 		if (InteractAction)
 		{
@@ -95,9 +107,17 @@ void AShipPawn::PossessedBy(AController* NewController)
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
 			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 		{
-			if (ShipMappingContext)
+			if (CommonMappingContext)
 			{
-				Subsystem->AddMappingContext(ShipMappingContext, 0);
+				Subsystem->AddMappingContext(CommonMappingContext, 0);
+			}
+			if (ThrustMappingContext)
+			{
+				Subsystem->AddMappingContext(ThrustMappingContext, 1);
+			}
+			if (RollMappingContext)
+			{
+				Subsystem->AddMappingContext(RollMappingContext, 2);
 			}
 		}
 	}
@@ -110,10 +130,9 @@ void AShipPawn::UnPossessed()
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
 			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 		{
-			if (ShipMappingContext)
-			{
-				Subsystem->RemoveMappingContext(ShipMappingContext);
-			}
+			Subsystem->RemoveMappingContext(CommonMappingContext);
+			Subsystem->RemoveMappingContext(ThrustMappingContext);
+			Subsystem->RemoveMappingContext(RollMappingContext);
 		}
 	}
 
@@ -143,6 +162,13 @@ void AShipPawn::ShipFlyingMove(const FInputActionValue& Value)
 	{
 		Thruster->AddForceToMovemntComponent(FinalDirection);
 	}
+}
+
+void AShipPawn::ShipRoll(const FInputActionValue& Value)
+{
+	float RollValue = Value.Get<float>();
+	FVector Torque = GetActorForwardVector() * RollValue * TorqueMultiplier;
+	ShipMesh->AddTorqueInRadians(Torque, NAME_None, true);
 }
 
 void AShipPawn::OnInteract()

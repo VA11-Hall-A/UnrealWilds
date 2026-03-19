@@ -63,8 +63,17 @@ protected:
 
 	// ── Input ───────────────────────────────────────────────────────────────
 
+	/** Always-active context: Look, Interact, Probes */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
-	TObjectPtr<UInputMappingContext> ShipMappingContext;
+	TObjectPtr<UInputMappingContext> CommonMappingContext;
+
+	/** 6-axis thrust */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
+	TObjectPtr<UInputMappingContext> ThrustMappingContext;
+
+	/** Roll rotation */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
+	TObjectPtr<UInputMappingContext> RollMappingContext;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
 	TObjectPtr<UInputAction> LookAction;
@@ -79,7 +88,16 @@ protected:
 	TObjectPtr<UInputAction> RecallProbeAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
+	TObjectPtr<UInputAction> RotateProbeCameraAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
+	TObjectPtr<UInputAction> CaptureProbePhotoAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
 	TObjectPtr<UInputAction> InteractAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
+	TObjectPtr<UInputAction> RollAction;
 
 	// ── Config ──────────────────────────────────────────────────────────────
 
@@ -89,6 +107,7 @@ protected:
 private:
 	void ShipLook(const FInputActionValue& Value);
 	void ShipFlyingMove(const FInputActionValue& Value);
+	void ShipRoll(const FInputActionValue& Value);
 	void OnInteract();
 
 	UFUNCTION()

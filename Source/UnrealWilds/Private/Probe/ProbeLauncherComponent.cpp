@@ -4,6 +4,7 @@
 #include "Probe/Probe.h"
 #include "Camera/CameraComponent.h"
 #include "Engine/World.h"
+#include "Engine/TextureRenderTarget2D.h"
 
 TWeakObjectPtr<AProbe> UProbeLauncherComponent::ActiveProbe;
 
@@ -62,4 +63,24 @@ void UProbeLauncherComponent::RecallProbe()
 AProbe* UProbeLauncherComponent::GetActiveProbe() const
 {
 	return ActiveProbe.Get();
+}
+
+void UProbeLauncherComponent::RotateProbeCamera()
+{
+	if (ActiveProbe.IsValid())
+	{
+		ActiveProbe->RotateCamera();
+	}
+}
+
+void UProbeLauncherComponent::CaptureProbePhoto()
+{
+	if (ActiveProbe.IsValid())
+	{
+		UTextureRenderTarget2D* RT = ActiveProbe->CapturePhoto();
+		if (RT)
+		{
+			OnPhotoCaptured.Broadcast(RT);
+		}
+	}
 }

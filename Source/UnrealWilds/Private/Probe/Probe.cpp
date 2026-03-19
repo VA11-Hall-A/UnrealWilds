@@ -2,6 +2,8 @@
 
 #include "Probe/Probe.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 
 AProbe::AProbe()
 {
@@ -15,6 +17,12 @@ AProbe::AProbe()
 	ProbeMesh->SetEnableGravity(false);
 	ProbeMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	ProbeMesh->SetNotifyRigidBodyCollision(true);
+
+	ProbeCamera = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("ProbeCamera"));
+	ProbeCamera->SetupAttachment(ProbeMesh);
+	ProbeCamera->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
+	ProbeCamera->bCaptureEveryFrame = false;
+	ProbeCamera->bCaptureOnMovement = false;
 }
 
 void AProbe::BeginPlay()
@@ -22,6 +30,11 @@ void AProbe::BeginPlay()
 	Super::BeginPlay();
 
 	ProbeMesh->OnComponentHit.AddDynamic(this, &AProbe::OnProbeHit);
+
+	// Create render target at runtime
+	PhotoRenderTarget = NewObject<UTextureRenderTarget2D>(this);
+	PhotoRenderTarget->InitAutoFormat(RenderTargetResolution, RenderTargetResolution);
+	ProbeCamera->TextureTarget = PhotoRenderTarget;
 }
 
 void AProbe::OnProbeHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
@@ -58,6 +71,8 @@ void AProbe::OnProbeHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimi
 void AProbe::Launch(const FVector& Direction, float Speed, const FVector& InheritedVelocity)
 {
 	bIsAttached = false;
+	CameraYawStep = 0;
+	ProbeCamera->SetRelativeRotation(FRotator::ZeroRotator);
 
 	// Detach in case we are reusing a probe
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
@@ -66,4 +81,20 @@ void AProbe::Launch(const FVector& Direction, float Speed, const FVector& Inheri
 	ProbeMesh->SetEnableGravity(false);
 
 	ProbeMesh->SetPhysicsLinearVelocity(Direction * Speed + InheritedVelocity);
+}
+
+void AProbe::RotateCamera()
+{
+	CameraYawStep = (CameraYawStep + 1) % 8;
+	const float NewYaw = CameraYawStep * -45.0f;
+	ProbeCamera->SetRelativeRotation(FRotator(0.0f, NewYaw, 0.0f));
+}
+
+UTextureRenderTarget2D* AProbe::CapturePhoto()
+{
+	if (ProbeCamera && PhotoRenderTarget)
+	{
+		ProbeCamera->CaptureScene();
+	}
+	return PhotoRenderTarget;
 }
