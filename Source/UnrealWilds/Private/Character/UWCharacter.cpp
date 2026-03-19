@@ -108,13 +108,9 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		{
 			EIC->BindAction(RollAction, ETriggerEvent::Triggered, this, &AUWCharacter::Roll);
 		}
-		if (LaunchProbeAction)
+		if (ToggleProbeAction)
 		{
-			EIC->BindAction(LaunchProbeAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::LaunchProbe);
-		}
-		if (RecallProbeAction)
-		{
-			EIC->BindAction(RecallProbeAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::RecallProbe);
+			EIC->BindAction(ToggleProbeAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::ToggleProbe);
 		}
 		if (RotateProbeCameraAction)
 		{
@@ -153,7 +149,7 @@ void AUWCharacter::Look(const FInputActionValue& Value)
 		UCapsuleComponent* Capsule = GetCapsuleComponent();
 		if (Capsule)
 		{
-			float TorqueMultiplier = 15.0f; // Torque multiplier for AccelChange
+			 // Torque multiplier for AccelChange
 			// Yaw rotates around UpVector, Pitch rotates around RightVector
 			FVector Torque = GetActorUpVector() * LookAxisVector.X * TorqueMultiplier
 				+ GetActorRightVector() * LookAxisVector.Y * TorqueMultiplier; // Inverted Y for natural pitch
@@ -186,7 +182,6 @@ void AUWCharacter::Roll(const FInputActionValue& Value)
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	if (Capsule)
 	{
-		float TorqueMultiplier = 15.0f;
 		FVector Torque = GetActorForwardVector() * RollValue * TorqueMultiplier;
 		Capsule->AddTorqueInRadians(Torque, NAME_None, true);
 	}

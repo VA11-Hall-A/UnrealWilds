@@ -25,6 +25,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Probe")
 	void RecallProbe();
 
+	UFUNCTION(BlueprintCallable, Category="Probe")
+	void ToggleProbe();
+
 	UFUNCTION(BlueprintPure, Category="Probe")
 	AProbe* GetActiveProbe() const;
 

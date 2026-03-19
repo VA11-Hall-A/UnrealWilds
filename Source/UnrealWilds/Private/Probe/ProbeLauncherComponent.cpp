@@ -84,3 +84,15 @@ void UProbeLauncherComponent::CaptureProbePhoto()
 		}
 	}
 }
+
+void UProbeLauncherComponent::ToggleProbe()
+{
+	if (ActiveProbe.IsValid())
+	{
+		RecallProbe();
+	}
+	else
+	{
+		LaunchProbe();
+	}
+}

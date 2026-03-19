@@ -39,36 +39,27 @@ void UGravityWorldSubsystem::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	UpdateCMCGravities();
 
-	if (CMComponent)
-	{
-		TimeSinceLastOriginRebase += DeltaTime;
-		// 定时将actor（世界中心）重新设定，避免远离中心导致的浮点数精度丢失问题
-		// Outer Wilds等星际探索游戏常见做法：每隔一段时间（或距离），将世界原点平移至玩家当前位置
-		if (TimeSinceLastOriginRebase >= 10.0f) 
-		{
-			TimeSinceLastOriginRebase = 0.0f;
-			FVector ActorLoc = CMComponent->GetActorLocation();
-			
-			// 可以根据需要添加距离判定，只有超过一定距离才重置原点，这里简单判断一下避免过频
-			if (ActorLoc.SizeSquared() > FMath::Square(5000.0))
-			{
-				if (UWorld* World = GetWorld())
-				{
-					// RequestNewWorldOrigin在帧末尾安全地将世界原点平移到玩家所在坐标
-					World->SetNewWorldOrigin(FIntVector(ActorLoc.X, ActorLoc.Y, ActorLoc.Z) + World->OriginLocation);
-					if (GEngine)
-					{
-						GEngine->AddOnScreenDebugMessage(
-							-1,              // Key: -1 表示每次都创建新消息，不覆盖旧的
-							5.0f,            // Duration: 显示时长（秒）
-							FColor::Yellow,  // Color: 文本颜色
-							TEXT("Hello World! This is a screen log.") // 消息内容
-						);
-					}
-				}
-			}
-		}
-	}
+	// if (CMComponent)
+	// {
+	// 	TimeSinceLastOriginRebase += DeltaTime;
+	// 	// 定时将actor（世界中心）重新设定，避免远离中心导致的浮点数精度丢失问题
+	// 	// Outer Wilds等星际探索游戏常见做法：每隔一段时间（或距离），将世界原点平移至玩家当前位置
+	// 	if (TimeSinceLastOriginRebase >= 10.0f) 
+	// 	{
+	// 		TimeSinceLastOriginRebase = 0.0f;
+	// 		FVector ActorLoc = CMComponent->GetActorLocation();
+	// 		
+	// 		// 可以根据需要添加距离判定，只有超过一定距离才重置原点，这里简单判断一下避免过频
+	// 		if (ActorLoc.SizeSquared() > FMath::Square(5000.0))
+	// 		{
+	// 			if (UWorld* World = GetWorld())
+	// 			{
+	// 				// RequestNewWorldOrigin在帧末尾安全地将世界原点平移到玩家所在坐标
+	// 				World->SetNewWorldOrigin(FIntVector(ActorLoc.X, ActorLoc.Y, ActorLoc.Z) + World->OriginLocation);
+	// 			}
+	// 		}
+	// 	}
+	// }
 }
 
 void UGravityWorldSubsystem::RegisterPlayerCharacter(UCharacterMovementComponent* InCMComponent)

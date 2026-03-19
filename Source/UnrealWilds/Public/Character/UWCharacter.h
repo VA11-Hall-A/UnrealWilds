@@ -107,10 +107,7 @@ protected:
 	UProbeLauncherComponent* ProbeLauncher;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
-	TObjectPtr<UInputAction> LaunchProbeAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
-	TObjectPtr<UInputAction> RecallProbeAction;
+	TObjectPtr<UInputAction> ToggleProbeAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input")
 	TObjectPtr<UInputAction> RotateProbeCameraAction;
@@ -129,14 +126,14 @@ protected:
 	UFUNCTION()
 	void OnDetachedFromPlanet(FVector OrbitalVelocity);
 
-	// ── Camera ──────────────────────────────────────────────────────────────
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCameraComponent;
 
 	UPROPERTY(VisibleInstanceOnly)
 	bool bOffGround =false;
-	
+
+	UPROPERTY(EditDefaultsOnly,BlueprintReadWrite)
+	float TorqueMultiplier=150.0f;
 
 };
 
