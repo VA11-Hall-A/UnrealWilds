@@ -102,6 +102,7 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		if (FlyingMoveAction)
 		{
 			EIC->BindAction(FlyingMoveAction, ETriggerEvent::Triggered, this, &AUWCharacter::FlyingMove);
+			EIC->BindAction(FlyingMoveAction, ETriggerEvent::Completed, this, &AUWCharacter::FlyingMove);
 		}
 		if (RollAction)
 		{
@@ -173,10 +174,9 @@ void AUWCharacter::Look(const FInputActionValue& Value)
 void AUWCharacter::FlyingMove(const FInputActionValue& Value)
 {
 	FVector MovemntVector = Value.Get<FVector>();
-	FVector FinalVector = GetActorForwardVector() * MovemntVector.Y + GetActorRightVector() * MovemntVector.X + GetActorUpVector() * MovemntVector.Z;
 	if (Thruster)
 	{
-		Thruster->AddForceToMovemntComponent(FinalVector);
+		Thruster->AddForceToMovemntComponent(MovemntVector);
 	}
 }
 

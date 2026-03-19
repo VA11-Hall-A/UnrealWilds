@@ -18,15 +18,28 @@ UThrusterComponent::UThrusterComponent()
 	// ...
 }
 
-void UThrusterComponent::AddForceToMovemntComponent(FVector InputDirection)
+void UThrusterComponent::AddForceToMovemntComponent(FVector LocalInput)
 {
+	CurrentLocalAcceleration = LocalInput * ThrustForce;
+	OnAccelerationChanged.Broadcast(CurrentLocalAcceleration);
+
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	FVector WorldDirection = OwnerActor->GetActorForwardVector() * LocalInput.Y
+		+ OwnerActor->GetActorRightVector() * LocalInput.X
+		+ OwnerActor->GetActorUpVector() * LocalInput.Z;
+
 	if (bIsCharacterMode)
 	{
-		MovementComponent->AddForce(InputDirection * ThrustForce * Mass);
+		MovementComponent->AddForce(WorldDirection * ThrustForce * Mass);
 	}
 	else
 	{
-		PrimitiveComponent->AddForce(InputDirection * ThrustForce*Mass);
+		PrimitiveComponent->AddForce(WorldDirection * ThrustForce * Mass);
 	}
 }
 

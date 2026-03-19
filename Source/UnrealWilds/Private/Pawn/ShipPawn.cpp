@@ -70,6 +70,7 @@ void AShipPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 		if (FlyingMoveAction)
 		{
 			EIC->BindAction(FlyingMoveAction, ETriggerEvent::Triggered, this, &AShipPawn::ShipFlyingMove);
+			EIC->BindAction(FlyingMoveAction, ETriggerEvent::Completed, this, &AShipPawn::ShipFlyingMove);
 		}
 		if (RollAction)
 		{
@@ -154,13 +155,10 @@ void AShipPawn::ShipLook(const FInputActionValue& Value)
 void AShipPawn::ShipFlyingMove(const FInputActionValue& Value)
 {
 	FVector MovementVector = Value.Get<FVector>();
-	FVector FinalDirection = GetActorForwardVector() * MovementVector.Y
-		+ GetActorRightVector() * MovementVector.X
-		+ GetActorUpVector() * MovementVector.Z;
 
 	if (Thruster)
 	{
-		Thruster->AddForceToMovemntComponent(FinalDirection);
+		Thruster->AddForceToMovemntComponent(MovementVector);
 	}
 }
 
