@@ -33,12 +33,15 @@ public:
 	AUWCharacter(const FObjectInitializer& ObjectInitializer);
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void EnterSurfaceGravity();
+	void EnterSurfaceGravity(FVector OverrideUpVector = FVector::ZeroVector);
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void EnterZeroG(FVector InheritedOrbitalVelocity = FVector::ZeroVector);
 
 	ECharacterMovementState GetCurrentMovementState() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	bool IsOnGravityFloor() const;
 
 	virtual FVector GetVelocity() const override;
 

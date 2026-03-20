@@ -7,6 +7,7 @@
 #include "GravitySourceComponent.h"
 #include "GravityWorldSubsystem.generated.h"
 
+class AGravityFloor;
 class AUWCharacter;
 class FGravityAsyncCallback;
 class UCharacterMovementComponent;
@@ -40,7 +41,11 @@ public: // UTickableWorldSubsystem overrides
 	virtual bool IsAsyncCallbackRegistered() const;
 	void AddGravitySourceData(const FGravitySourceData& InputData) const;
 	FGravityAsyncCallback* AsyncCallback = nullptr;
- 
+
+	void RegisterGravityFloor(AGravityFloor* Floor);
+	void UnregisterGravityFloor(AGravityFloor* Floor);
+	bool IsGravityFloorActive() const;
+
 protected:
  
 	// List of existing gravity attractors in the world
@@ -48,6 +53,8 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly)
 	TObjectPtr<UCharacterMovementComponent> CMComponent = nullptr;
+
+	TArray<TWeakObjectPtr<AGravityFloor>> ActiveGravityFloors;
 
 	float TimeSinceLastOriginRebase = 0.0f;
 };

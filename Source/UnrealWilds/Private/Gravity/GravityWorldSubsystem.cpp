@@ -3,6 +3,7 @@
 
 #include "Gravity/GravityWorldSubsystem.h"
 #include "Gravity/GravityAsyncCallback.h"
+#include "Gravity/GravityFloor.h"
 #include "Physics/Experimental/PhysScene_Chaos.h"
 #include "PBDRigidsSolver.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -102,6 +103,34 @@ void UGravityWorldSubsystem::AddGravitySourceData(const FGravitySourceData& Inpu
 	}
 }
 
+void UGravityWorldSubsystem::RegisterGravityFloor(AGravityFloor* Floor)
+{
+	if (Floor)
+	{
+		ActiveGravityFloors.Add(Floor);
+	}
+}
+
+void UGravityWorldSubsystem::UnregisterGravityFloor(AGravityFloor* Floor)
+{
+	ActiveGravityFloors.RemoveAll([Floor](const TWeakObjectPtr<AGravityFloor>& Ptr)
+	{
+		return !Ptr.IsValid() || Ptr.Get() == Floor;
+	});
+}
+
+bool UGravityWorldSubsystem::IsGravityFloorActive() const
+{
+	for (const auto& Ptr : ActiveGravityFloors)
+	{
+		if (Ptr.IsValid())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void UGravityWorldSubsystem::UpdateCMCGravities()
 {
 	if (CMComponent !=nullptr)
@@ -111,6 +140,25 @@ void UGravityWorldSubsystem::UpdateCMCGravities()
 		if (CMComponent->MovementMode == MOVE_None)
 		{
 			return;
+		}
+
+		// 重力地板优先：跳过行星引力，改用地板方向和加速度
+		if (IsGravityFloorActive())
+		{
+			// 从数组末尾取最近注册的地板
+			for (int32 i = ActiveGravityFloors.Num() - 1; i >= 0; --i)
+			{
+				if (ActiveGravityFloors[i].IsValid())
+				{
+					AGravityFloor* Floor = ActiveGravityFloors[i].Get();
+					FVector FloorDirection = Floor->GetGravityDirection();
+					double FloorAccel = Floor->GetGravityAcceleration();
+
+					CMComponent->AddForce(FloorDirection * FloorAccel * CMComponent->Mass);
+					CMComponent->SetGravityDirection(FloorDirection);
+					return;
+				}
+			}
 		}
 
 		FVector AdditionalAcceleration = FVector::ZeroVector; 

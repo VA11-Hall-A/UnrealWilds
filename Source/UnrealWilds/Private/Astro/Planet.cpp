@@ -127,7 +127,7 @@ void APlanet::OnHollowBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* 
 {
 	if (AUWCharacter* Character = Cast<AUWCharacter>(OtherActor))
 	{
-		if (Character->IsLocallyControlled())
+		if (Character->IsLocallyControlled() && !Character->IsOnGravityFloor())
 		{
 			Character->EnterZeroG();
 		}
@@ -138,7 +138,7 @@ void APlanet::OnHollowEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* Ot
 {
 	if (AUWCharacter* Character = Cast<AUWCharacter>(OtherActor))
 	{
-		if (Character->IsLocallyControlled())
+		if (Character->IsLocallyControlled() && !Character->IsOnGravityFloor())
 		{
 			Character->EnterSurfaceGravity();
 		}

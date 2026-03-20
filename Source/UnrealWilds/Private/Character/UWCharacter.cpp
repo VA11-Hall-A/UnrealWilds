@@ -227,7 +227,7 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 	}
 }
 
-void AUWCharacter::EnterSurfaceGravity()
+void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector)
 {
 	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
 
@@ -242,16 +242,24 @@ void AUWCharacter::EnterSurfaceGravity()
 	FVector PhysicsVelocity = Capsule->GetComponentVelocity();
 
 	Capsule->SetSimulatePhysics(false);
-	
+
 	CMC->SetMovementMode(MOVE_Falling);
 	CMC->Velocity = PhysicsVelocity;
 	Thruster->bIsCharacterMode = true;
 
 	// Calculate new upright body rotation based on gravity direction and camera yaw
-	FVector NewUpVector = GetActorUpVector();
-	if (APlanet* Planet = PlanetAttachment->GetCurrentPlanet())
+	FVector NewUpVector;
+	if (!OverrideUpVector.IsNearlyZero())
 	{
-		NewUpVector = (GetActorLocation() - Planet->GetActorLocation()).GetSafeNormal();
+		NewUpVector = OverrideUpVector;
+	}
+	else
+	{
+		NewUpVector = GetActorUpVector();
+		if (APlanet* Planet = PlanetAttachment->GetCurrentPlanet())
+		{
+			NewUpVector = (GetActorLocation() - Planet->GetActorLocation()).GetSafeNormal();
+		}
 	}
 	
 	FVector CameraForward = CameraRotation.Vector();
@@ -285,11 +293,21 @@ void AUWCharacter::EnterSurfaceGravity()
 
 void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 {
+	// Already in ZeroG (e.g. hollow sphere → leave atmosphere):
+	// DetachFromPlanet already set the correct physics velocity, don't overwrite it.
+	if (CurrentMovementState == ECharacterMovementState::ZeroG)
+	{
+		return;
+	}
+
 	CurrentMovementState = ECharacterMovementState::ZeroG;
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
 
+	// Capture whether CMC velocity is planet-relative (on ground) or
+	// world-absolute (falling after jump, where OnMovementModeChanged already baked in orbital).
+	const bool bWasOnGround = CMC->IsMovingOnGround();
 	FVector CMCVelocity = CMC->Velocity;
 
 	// Record camera world transform before state change
@@ -311,7 +329,9 @@ void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 	Capsule->BodyInstance.bLockYRotation = false;
 	Capsule->BodyInstance.bLockZRotation = false;
 
-	FVector TotalVelocity = CMCVelocity + InheritedOrbitalVelocity;
+	// Only add InheritedOrbitalVelocity when CMC was planet-relative (on ground).
+	// If the character was falling (after jump), CMC already contains orbital velocity.
+	FVector TotalVelocity = CMCVelocity + (bWasOnGround ? InheritedOrbitalVelocity : FVector::ZeroVector);
 	Capsule->SetPhysicsLinearVelocity(TotalVelocity);
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -336,13 +356,32 @@ ECharacterMovementState AUWCharacter::GetCurrentMovementState() const
 	return CurrentMovementState;
 }
 
+bool AUWCharacter::IsOnGravityFloor() const
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (UGravityWorldSubsystem* Sub = World->GetSubsystem<UGravityWorldSubsystem>())
+		{
+			return Sub->IsGravityFloorActive();
+		}
+	}
+	return false;
+}
+
 FVector AUWCharacter::GetVelocity() const
 {
 	FVector OrbitalVelocity = PlanetAttachment->GetOrbitalVelocity();
 
 	if (CurrentMovementState == ECharacterMovementState::SurfaceGravity)
 	{
-		return GetCharacterMovement()->Velocity + OrbitalVelocity;
+		const FVector CMCVelocity = GetCharacterMovement()->Velocity;
+		// On ground: CMC velocity is planet-relative, need to add orbital for world-space result.
+		// In air (after jump): CMC velocity is already world-absolute (orbital baked in by OnMovementModeChanged).
+		if (GetCharacterMovement()->IsMovingOnGround())
+		{
+			return CMCVelocity + OrbitalVelocity;
+		}
+		return CMCVelocity;
 	}
 
 	// ZeroG: use physics velocity from capsule
@@ -433,12 +472,20 @@ void AUWCharacter::OnAttachedToPlanet(APlanet* Planet)
 	{
 		return;
 	}
+	if (IsOnGravityFloor())
+	{
+		return;
+	}
 	EnterSurfaceGravity();
 }
 
 void AUWCharacter::OnDetachedFromPlanet(FVector OrbitalVelocity)
 {
 	if (!IsLocallyControlled())
+	{
+		return;
+	}
+	if (IsOnGravityFloor())
 	{
 		return;
 	}
