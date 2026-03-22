@@ -21,7 +21,7 @@ UThrusterComponent::UThrusterComponent()
 void UThrusterComponent::AddForceToMovemntComponent(FVector LocalInput)
 {
 	CurrentLocalAcceleration = LocalInput * ThrustForce;
-	OnAccelerationChanged.Broadcast(CurrentLocalAcceleration);
+	OnAccelerationChanged.Broadcast(LocalInput);
 
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor)

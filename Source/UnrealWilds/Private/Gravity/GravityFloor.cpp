@@ -11,11 +11,11 @@ AGravityFloor::AGravityFloor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-	SetRootComponent(Root);
+	FloorMesh=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FloorMesh"));
+	SetRootComponent(FloorMesh);
 
 	DetectionVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("DetectionVolume"));
-	DetectionVolume->SetupAttachment(Root);
+	DetectionVolume->SetupAttachment(FloorMesh);
 	DetectionVolume->SetBoxExtent(BoxExtent);
 	DetectionVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	DetectionVolume->SetCollisionObjectType(ECC_WorldDynamic);
@@ -26,8 +26,7 @@ AGravityFloor::AGravityFloor()
 void AGravityFloor::BeginPlay()
 {
 	Super::BeginPlay();
-
-	DetectionVolume->SetBoxExtent(BoxExtent);
+	
 	DetectionVolume->OnComponentBeginOverlap.AddDynamic(this, &AGravityFloor::OnVolumeBeginOverlap);
 	DetectionVolume->OnComponentEndOverlap.AddDynamic(this, &AGravityFloor::OnVolumeEndOverlap);
 }

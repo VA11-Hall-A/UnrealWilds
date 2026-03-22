@@ -33,6 +33,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Astro|Orbit")
 	FVector GetOrbitalVelocity() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Astro|Orbit")
+	FVector GetSunLocation() const;
+
 	UFUNCTION()
 	void OnAtmosphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
@@ -56,6 +59,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Astro|Orbit")
 	ACelestialBody* OrbitCenterActor;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Astro|Orbit")
+	TSubclassOf<class AStar> SunClass;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Astro|Orbit")
+	AStar* SunActor;
+	
 	// The speed of revolution (degrees per second)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Astro|Orbit")
 	float OrbitSpeed = 10.0f;

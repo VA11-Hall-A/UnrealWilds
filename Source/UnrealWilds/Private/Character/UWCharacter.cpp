@@ -229,6 +229,9 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 
 void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector)
 {
+	if (bIsTransitioningState) return;
+	bIsTransitioningState = true;
+
 	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
@@ -289,16 +292,22 @@ void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector)
 		}
 	}
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
+
+	bIsTransitioningState = false;
 }
 
 void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 {
+	if (bIsTransitioningState) return;
+
 	// Already in ZeroG (e.g. hollow sphere → leave atmosphere):
 	// DetachFromPlanet already set the correct physics velocity, don't overwrite it.
 	if (CurrentMovementState == ECharacterMovementState::ZeroG)
 	{
 		return;
 	}
+
+	bIsTransitioningState = true;
 
 	CurrentMovementState = ECharacterMovementState::ZeroG;
 
@@ -349,6 +358,8 @@ void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 
 	FirstPersonCameraComponent->bUsePawnControlRotation = false;
 	FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
+
+	bIsTransitioningState = false;
 }
 
 ECharacterMovementState AUWCharacter::GetCurrentMovementState() const

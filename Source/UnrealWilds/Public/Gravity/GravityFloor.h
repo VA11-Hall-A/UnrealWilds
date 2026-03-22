@@ -24,6 +24,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GravityFloor")
 	TObjectPtr<UBoxComponent> DetectionVolume;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GravityFloor")
+	TObjectPtr<UStaticMeshComponent> FloorMesh;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GravityFloor", meta = (ForceUnits = "cm/s2"))
 	float GravityAcceleration = 980.0f;
 

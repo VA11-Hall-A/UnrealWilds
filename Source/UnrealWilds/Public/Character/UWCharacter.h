@@ -55,6 +55,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	ECharacterMovementState CurrentMovementState = ECharacterMovementState::SurfaceGravity;
 
+	/** Re-entrancy guard: prevents overlap callbacks from recursing during state transitions. */
+	bool bIsTransitioningState = false;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Planet")
 	TObjectPtr<UPlanetAttachmentComponent> PlanetAttachment;
 
@@ -103,7 +106,7 @@ protected:
 	void Roll(const FInputActionValue& Value);
 	void OnInteract();
 
-	UPROPERTY(EditDefaultsOnly)
+	UPROPERTY(BlueprintReadOnly)
 	UThrusterComponent* Thruster;
 
 	UPROPERTY(EditDefaultsOnly)

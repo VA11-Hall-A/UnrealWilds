@@ -18,6 +18,7 @@ class UNREALWILDS_API UPlanetAttachmentComponent : public UActorComponent
 public:
 	UPlanetAttachmentComponent();
 
+	UFUNCTION(BlueprintCallable, Category="Planet")
 	void Initialize(UPrimitiveComponent* InPhysicsPrimitive);
 
 	void AttachToPlanet(APlanet* Planet);
@@ -31,9 +32,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Planet")
 	bool IsAttachedToPlanet() const { return CurrentPlanet != nullptr; }
 
+	UFUNCTION(BlueprintCallable, Category="Planet")
 	void CheckInitialPlanetState();
 
-	UPROPERTY(BlueprintAssignable, Category="Planet")
+	UPROPERTY(BlueprintAssignable, Category="Planet") 
 	FOnAttachedToPlanet OnAttachedToPlanet;
 
 	UPROPERTY(BlueprintAssignable, Category="Planet")

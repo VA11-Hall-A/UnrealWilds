@@ -1,0 +1,3 @@
+[submodule "Plugins/SweetAtmosphere"]
+	path = Plugins/SweetAtmosphere
+	url = https://github.com/SweetBiz/SweetAtmosphere.git

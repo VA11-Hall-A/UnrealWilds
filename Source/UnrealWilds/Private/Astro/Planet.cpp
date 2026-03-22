@@ -2,6 +2,8 @@
 
 
 #include "Astro/Planet.h"
+
+#include "Astro/Star.h"
 #include "Components/SphereComponent.h"
 #include "Components/SceneComponent.h"
 #include "Character/UWCharacter.h"
@@ -68,6 +70,11 @@ void APlanet::BeginPlay()
 			OrbitSpeed = static_cast<float>(FMath::RadiansToDegrees(Omega));
 		}
 	}
+
+	if (SunClass)
+	{
+		SunActor=Cast<AStar>(UGameplayStatics::GetActorOfClass(this, SunClass));
+	}
 }
 
 void APlanet::Tick(float DeltaTime)
@@ -105,6 +112,11 @@ FVector APlanet::GetOrbitalVelocity() const
 	return FVector(-OrbitRadius * W * FMath::Sin(RadianAngle), 
 					OrbitRadius * W * FMath::Cos(RadianAngle), 
 					0.0f);
+}
+
+FVector APlanet::GetSunLocation() const
+{
+	return SunActor->GetActorLocation();
 }
 
 void APlanet::OnAtmosphereBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

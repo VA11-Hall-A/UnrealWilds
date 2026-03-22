@@ -188,6 +188,7 @@ void AShipPawn::BoardShip(AUWCharacter* Character)
 	{
 		return;
 	}
+	UE_LOG(LogTemp,Warning,TEXT("boardship"))
 
 	StoredCharacter = Character;
 
