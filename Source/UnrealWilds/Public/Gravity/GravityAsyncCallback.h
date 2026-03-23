@@ -1,4 +1,5 @@
-﻿#include "CoreMinimal.h"
+﻿#pragma once
+#include "CoreMinimal.h"
 
 struct FGravitySourceData
 {
