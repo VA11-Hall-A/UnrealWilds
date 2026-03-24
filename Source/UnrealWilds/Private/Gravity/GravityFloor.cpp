@@ -50,19 +50,24 @@ void AGravityFloor::OnVolumeBeginOverlap(UPrimitiveComponent* OverlappedComp, AA
 		return;
 	}
 
-	// 若角色处于 ZeroG，先切换到 SurfaceGravity
-	if (Character->GetCurrentMovementState() == ECharacterMovementState::ZeroG)
-	{
-		Character->EnterSurfaceGravity(-GetActorUpVector());
-	}
-
 	UGravityWorldSubsystem* Sub = GetWorld()->GetSubsystem<UGravityWorldSubsystem>();
 	if (Sub)
 	{
 		Sub->RegisterGravityFloor(this);
 	}
 
-	// 立即设置重力方向，不等待 subsystem 下一帧 tick
+	const FVector FloorUpVector = -GetGravityDirection();
+	const double FloorGravityAcceleration = GetGravityAcceleration();
+	const ECharacterMovementState MovementState = Character->GetCurrentMovementState();
+	if (MovementState == ECharacterMovementState::ZeroG)
+	{
+		Character->EnterSurfaceGravity(FloorUpVector, FloorGravityAcceleration);
+	}
+	else if (MovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		Character->UpdateTransitionSurfaceGravity(FloorUpVector, FloorGravityAcceleration);
+	}
+
 	Character->GetCharacterMovement()->SetGravityDirection(GetGravityDirection());
 }
 
@@ -105,16 +110,13 @@ void AGravityFloor::DetermineExitState(AUWCharacter* Character)
 			float HollowRadius = Planet->HollowInnerSphere->GetScaledSphereRadius();
 			if (Dist < HollowRadius)
 			{
-				// 在空洞内部，进入零重力
 				Character->EnterZeroG(Character->GetCharacterMovement()->Velocity);
 				return;
 			}
 		}
-		// 在行星表面，subsystem 自然恢复行星引力，无需操作
 	}
 	else
 	{
-		// 未附着行星（太空中），进入零重力
 		Character->EnterZeroG(Character->GetCharacterMovement()->Velocity);
 	}
 }

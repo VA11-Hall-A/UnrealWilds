@@ -10,6 +10,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
 #include "Engine/Engine.h"
 #include "Gravity/GravityWorldSubsystem.h"
@@ -20,12 +21,116 @@
 #include "Pawn/ShipPawn.h"
 #include "EngineUtils.h"
 
+namespace
+{
+FRotator GetGravityRelativeRotation(FRotator Rotation, const FVector& GravityDirection)
+{
+	if (!GravityDirection.Equals(FVector::DownVector))
+	{
+		const FQuat GravityRotation = FQuat::FindBetweenNormals(GravityDirection, FVector::DownVector);
+		return (GravityRotation * Rotation.Quaternion()).Rotator();
+	}
+
+	return Rotation;
+}
+
+FRotator GetGravityWorldRotation(FRotator Rotation, const FVector& GravityDirection)
+{
+	if (!GravityDirection.Equals(FVector::DownVector))
+	{
+		const FQuat GravityRotation = FQuat::FindBetweenNormals(FVector::DownVector, GravityDirection);
+		return (GravityRotation * Rotation.Quaternion()).Rotator();
+	}
+
+	return Rotation;
+}
+
+bool IsWalkableHit(const FHitResult& Hit, const FVector& GravityDirection, const UCharacterMovementComponent* CharacterMovement)
+{
+	if (!Hit.bBlockingHit || CharacterMovement == nullptr)
+	{
+		return false;
+	}
+
+	const FVector UpDirection = -GravityDirection.GetSafeNormal();
+	return FVector::DotProduct(Hit.ImpactNormal, UpDirection) >= CharacterMovement->GetWalkableFloorZ();
+}
+
+FVector BuildSurfaceForward(const FVector& UpVector, const FVector& PreferredForward, const FVector& FallbackForward)
+{
+	FVector NewForward = FVector::VectorPlaneProject(PreferredForward, UpVector).GetSafeNormal();
+	if (NewForward.IsNearlyZero())
+	{
+		NewForward = FVector::VectorPlaneProject(FallbackForward, UpVector).GetSafeNormal();
+	}
+	if (NewForward.IsNearlyZero())
+	{
+		NewForward = FVector::CrossProduct(UpVector, FVector::RightVector).GetSafeNormal();
+		if (NewForward.IsNearlyZero())
+		{
+			NewForward = FVector::CrossProduct(UpVector, FVector::ForwardVector).GetSafeNormal();
+		}
+	}
+	return NewForward;
+}
+
+double ComputePlanetGravityAcceleration(const APlanet* Planet, const FVector& ActorLocation)
+{
+	if (Planet == nullptr || !Planet->ApplyGravity)
+	{
+		return 0.0;
+	}
+
+	const FVector Direction = Planet->GetActorLocation() - ActorLocation;
+	const double SquaredDistance = Direction.SquaredLength();
+	const double HollowRadiusSq = FMath::Square(Planet->HollowRadius);
+	if (SquaredDistance <= HollowRadiusSq)
+	{
+		return 0.0;
+	}
+
+	const double Distance = FMath::Max(FMath::Sqrt(SquaredDistance), UE_DOUBLE_SMALL_NUMBER);
+	const double MassDotG = Planet->Mass * 6.67430E-5;
+	const bool bIsInsidePlanet = Distance < Planet->PlanetRadius;
+
+	double Intensity = 0.0;
+	if (Planet->bUseInverseSquare)
+	{
+		if (bIsInsidePlanet)
+		{
+			const double HollowR3 = HollowRadiusSq * Planet->HollowRadius;
+			const double PlanetR3 = FMath::Pow(Planet->PlanetRadius, 3.0);
+			const double CurrentR3 = Distance * SquaredDistance;
+			Intensity = (MassDotG / SquaredDistance) * ((CurrentR3 - HollowR3) / (PlanetR3 - HollowR3));
+		}
+		else
+		{
+			Intensity = MassDotG / SquaredDistance;
+		}
+	}
+	else
+	{
+		if (bIsInsidePlanet)
+		{
+			const double SurfaceIntensity = MassDotG / Planet->PlanetRadius;
+			Intensity = SurfaceIntensity * ((Distance - Planet->HollowRadius) / (Planet->PlanetRadius - Planet->HollowRadius));
+		}
+		else
+		{
+			Intensity = MassDotG / Distance;
+		}
+	}
+
+	return FMath::Max(0.0, Intensity);
+}
+}
+
 // Sets default values
 
 inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UUWCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
@@ -80,6 +185,16 @@ void AUWCharacter::BeginPlay()
 	CheckInitialMovementState();
 }
 
+void AUWCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		TickTransitionToSurface(DeltaTime);
+	}
+}
+
 // Called to bind functionality to input
 void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -131,17 +246,26 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 
 void AUWCharacter::Move(const FInputActionValue& Value)
 {
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		return;
+	}
+
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
 	FVector ForwardDirection = GetActorForwardVector();
 	FVector RightDirection = GetActorRightVector();
-	// 6. 根据输入向量沿计算出的两个贴地平面方向移动
 	AddMovementInput(ForwardDirection, MovementVector.Y);
 	AddMovementInput(RightDirection, MovementVector.X);
 }
 
 void AUWCharacter::Look(const FInputActionValue& Value)
 {
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		return;
+	}
+
 	const FVector LookAxisVector = Value.Get<FVector>();
 
 	if (CurrentMovementState == ECharacterMovementState::ZeroG)
@@ -149,12 +273,10 @@ void AUWCharacter::Look(const FInputActionValue& Value)
 		UCapsuleComponent* Capsule = GetCapsuleComponent();
 		if (Capsule)
 		{
-			 // Torque multiplier for AccelChange
-			// Yaw rotates around UpVector, Pitch rotates around RightVector
 			FVector Torque = GetActorUpVector() * LookAxisVector.X * TorqueMultiplier
-				+ GetActorRightVector() * LookAxisVector.Y * TorqueMultiplier; // Inverted Y for natural pitch
+				+ GetActorRightVector() * LookAxisVector.Y * TorqueMultiplier;
 
-			Capsule->AddTorqueInRadians(Torque, NAME_None, true); // true = bAccelChange (ignores mass)
+			Capsule->AddTorqueInRadians(Torque, NAME_None, true);
 		}
 	}
 	else
@@ -167,8 +289,23 @@ void AUWCharacter::Look(const FInputActionValue& Value)
 	}
 }
 
+void AUWCharacter::Jump()
+{
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		return;
+	}
+
+	Super::Jump();
+}
+
 void AUWCharacter::FlyingMove(const FInputActionValue& Value)
 {
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		return;
+	}
+
 	FVector MovemntVector = Value.Get<FVector>();
 	if (Thruster)
 	{
@@ -178,6 +315,11 @@ void AUWCharacter::FlyingMove(const FInputActionValue& Value)
 
 void AUWCharacter::Roll(const FInputActionValue& Value)
 {
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		return;
+	}
+
 	float RollValue = Value.Get<float>();
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	if (Capsule)
@@ -212,7 +354,6 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 
 	if (PrevMovementMode == MOVE_Walking)
 	{
-		// Left ground: swap Foot → Thrust
 		InputSubsystem->RemoveMappingContext(FootMappingContext);
 		InputSubsystem->AddMappingContext(ThrustMappingContext, 1);
 		GetCharacterMovement()->Velocity += PlanetAttachment->GetOrbitalVelocity();
@@ -220,63 +361,96 @@ void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 P
 	}
 	if (GetCharacterMovement()->MovementMode == MOVE_Walking)
 	{
-		// Landed: swap Thrust → Foot, also remove Roll in case we came from ZeroG
 		InputSubsystem->RemoveMappingContext(ThrustMappingContext);
 		InputSubsystem->RemoveMappingContext(RollMappingContext);
 		InputSubsystem->AddMappingContext(FootMappingContext, 1);
 	}
 }
 
-void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector)
+bool AUWCharacter::ResolveSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration, FVector& OutUpVector, FVector& OutGravityDirection, double& OutGravityAcceleration) const
 {
-	if (bIsTransitioningState) return;
-	bIsTransitioningState = true;
+	if (!OverrideUpVector.IsNearlyZero())
+	{
+		OutUpVector = OverrideUpVector.GetSafeNormal();
+		OutGravityDirection = -OutUpVector;
+		OutGravityAcceleration = OverrideGravityAcceleration > 0.0 ? OverrideGravityAcceleration : TransitionGravityAcceleration;
+		if (OutGravityAcceleration <= 0.0)
+		{
+			OutGravityAcceleration = 980.0;
+		}
+		return true;
+	}
+
+	if (APlanet* Planet = PlanetAttachment->GetCurrentPlanet())
+	{
+		OutUpVector = (GetActorLocation() - Planet->GetActorLocation()).GetSafeNormal();
+		OutGravityDirection = -OutUpVector;
+		OutGravityAcceleration = OverrideGravityAcceleration > 0.0
+			? OverrideGravityAcceleration
+			: ComputePlanetGravityAcceleration(Planet, GetActorLocation());
+		return true;
+	}
+
+	return false;
+}
+
+void AUWCharacter::UpdateTransitionSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration)
+{
+	if (CurrentMovementState != ECharacterMovementState::TransitionToSurface)
+	{
+		return;
+	}
+
+	FVector NewUpVector;
+	FVector NewGravityDirection;
+	double NewGravityAcceleration = 0.0;
+	if (!ResolveSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration, NewUpVector, NewGravityDirection, NewGravityAcceleration))
+	{
+		return;
+	}
+
+	TransitionGravityDirection = NewGravityDirection;
+	TransitionGravityAcceleration = NewGravityAcceleration;
+
+	const FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
+	const FVector NewForward = BuildSurfaceForward(NewUpVector, CameraRotation.Vector(), GetActorForwardVector());
+	TransitionTargetActorQuat = FRotationMatrix::MakeFromXZ(NewForward, NewUpVector).ToQuat();
+
+	FRotator GravityRelativeCamera = GetGravityRelativeRotation(CameraRotation, TransitionGravityDirection);
+	GravityRelativeCamera.Roll = 0.0f;
+	TransitionTargetCameraQuat = GetGravityWorldRotation(GravityRelativeCamera, TransitionGravityDirection).Quaternion();
+}
+
+void AUWCharacter::SnapToSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration)
+{
+	FVector NewUpVector;
+	FVector NewGravityDirection;
+	double NewGravityAcceleration = 0.0;
+	if (!ResolveSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration, NewUpVector, NewGravityDirection, NewGravityAcceleration))
+	{
+		return;
+	}
 
 	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
 
-	// Record camera world transform before state change
-	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
-	FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
-
-	// Read velocity from physics before turning it off
-	FVector PhysicsVelocity = Capsule->GetComponentVelocity();
+	const FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	const FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
+	const FVector PhysicsVelocity = Capsule->GetComponentVelocity();
 
 	Capsule->SetSimulatePhysics(false);
-
+	CMC->SetGravityDirection(NewGravityDirection);
 	CMC->SetMovementMode(MOVE_Falling);
 	CMC->Velocity = PhysicsVelocity;
 	Thruster->bIsCharacterMode = true;
 
-	// Calculate new upright body rotation based on gravity direction and camera yaw
-	FVector NewUpVector;
-	if (!OverrideUpVector.IsNearlyZero())
-	{
-		NewUpVector = OverrideUpVector;
-	}
-	else
-	{
-		NewUpVector = GetActorUpVector();
-		if (APlanet* Planet = PlanetAttachment->GetCurrentPlanet())
-		{
-			NewUpVector = (GetActorLocation() - Planet->GetActorLocation()).GetSafeNormal();
-		}
-	}
-	
-	FVector CameraForward = CameraRotation.Vector();
-	FVector NewRight = FVector::CrossProduct(NewUpVector, CameraForward).GetSafeNormal();
-	if (NewRight.IsNearlyZero()) // Fallback if looking straight up/down
-	{
-		NewRight = FVector::CrossProduct(NewUpVector, GetActorForwardVector()).GetSafeNormal();
-	}
-	FVector NewForward = FVector::CrossProduct(NewRight, NewUpVector).GetSafeNormal();
-	FRotator NewActorRotation = FRotationMatrix::MakeFromXZ(NewForward, NewUpVector).Rotator();
+	const FVector NewForward = BuildSurfaceForward(NewUpVector, CameraRotation.Vector(), GetActorForwardVector());
+	const FRotator NewActorRotation = FRotationMatrix::MakeFromXZ(NewForward, NewUpVector).Rotator();
 
-	// Offset actor location so the camera world position remains exactly the same
-	FVector LocalCameraOffset = FirstPersonCameraComponent->GetRelativeLocation();
-	FVector NewActorLocation = CameraLocation - NewActorRotation.RotateVector(LocalCameraOffset);
+	const FVector LocalCameraOffset = FirstPersonCameraComponent->GetRelativeLocation();
+	const FVector NewActorLocation = CameraLocation - NewActorRotation.RotateVector(LocalCameraOffset);
 	SetActorLocationAndRotation(NewActorLocation, NewActorRotation, false, nullptr, ETeleportType::TeleportPhysics);
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -284,7 +458,6 @@ void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector)
 		PC->bAutoManageActiveCameraTarget = true;
 		PC->SetControlRotation(CameraRotation);
 
-		// Remove roll input when entering surface gravity
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
 			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 		{
@@ -292,16 +465,230 @@ void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector)
 		}
 	}
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
+}
+
+void AUWCharacter::StartTransitionToSurface(FVector OverrideUpVector, double OverrideGravityAcceleration)
+{
+	if (bIsTransitioningState)
+	{
+		return;
+	}
+
+	bIsTransitioningState = true;
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+
+	CurrentMovementState = ECharacterMovementState::TransitionToSurface;
+	TransitionElapsed = 0.0f;
+	bTransitionPendingFloorHit = false;
+	TransitionCameraLocalOffset = FirstPersonCameraComponent->GetRelativeLocation();
+	TransitionVelocityWorld = Capsule->GetPhysicsLinearVelocity();
+	TransitionStartActorQuat = GetActorQuat();
+	TransitionStartCameraQuat = FirstPersonCameraComponent->GetComponentQuat();
+
+	UpdateTransitionSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration);
+
+	Capsule->SetSimulatePhysics(false);
+	Capsule->SetEnableGravity(false);
+	Capsule->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
+	CMC->SetMovementMode(MOVE_None);
+	Thruster->bIsCharacterMode = false;
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bAutoManageActiveCameraTarget = true;
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->RemoveMappingContext(RollMappingContext);
+		}
+	}
+
+	FirstPersonCameraComponent->bUsePawnControlRotation = false;
+	SetActorTickEnabled(true);
 
 	bIsTransitioningState = false;
 }
 
+void AUWCharacter::TickTransitionToSurface(float DeltaTime)
+{
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	if (Capsule == nullptr || CMC == nullptr)
+	{
+		return;
+	}
+
+	const FVector StartActorLocation = GetActorLocation();
+	const FVector StartCameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+
+	TransitionVelocityWorld += TransitionGravityDirection * static_cast<float>(TransitionGravityAcceleration) * DeltaTime;
+	const FVector MoveDelta = TransitionVelocityWorld * DeltaTime;
+
+	FHitResult MoveHit;
+	SetActorLocation(StartActorLocation + MoveDelta, true, &MoveHit, ETeleportType::None);
+	const FVector ActualMoveDelta = GetActorLocation() - StartActorLocation;
+
+	if (MoveHit.bBlockingHit)
+	{
+		TransitionVelocityWorld = FVector::VectorPlaneProject(TransitionVelocityWorld, MoveHit.ImpactNormal);
+		bTransitionPendingFloorHit = bTransitionPendingFloorHit || IsWalkableHit(MoveHit, TransitionGravityDirection, CMC);
+	}
+
+	TransitionElapsed += DeltaTime;
+	const float Alpha = FMath::Clamp(TransitionElapsed / FMath::Max(TransitionDuration, KINDA_SMALL_NUMBER), 0.0f, 1.0f);
+	const float EasedAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, Alpha, 2.0f);
+
+	const FQuat NewActorQuat = FQuat::Slerp(TransitionStartActorQuat, TransitionTargetActorQuat, EasedAlpha).GetNormalized();
+	const FQuat NewCameraQuat = FQuat::Slerp(TransitionStartCameraQuat, TransitionTargetCameraQuat, EasedAlpha).GetNormalized();
+
+	const FVector DesiredCameraLocation = StartCameraLocation + ActualMoveDelta;
+	const FVector NewActorLocation = DesiredCameraLocation - NewActorQuat.RotateVector(TransitionCameraLocalOffset);
+
+	SetActorLocationAndRotation(NewActorLocation, NewActorQuat.Rotator(), false, nullptr, ETeleportType::None);
+	FirstPersonCameraComponent->SetWorldRotation(NewCameraQuat.Rotator());
+
+	if (Alpha >= 1.0f)
+	{
+		FinishTransitionToSurface();
+	}
+}
+
+void AUWCharacter::FinishTransitionToSurface()
+{
+	if (CurrentMovementState != ECharacterMovementState::TransitionToSurface)
+	{
+		return;
+	}
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	if (Capsule == nullptr || CMC == nullptr)
+	{
+		return;
+	}
+
+	const FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	const FVector FinalActorLocation = CameraLocation - TransitionTargetActorQuat.RotateVector(TransitionCameraLocalOffset);
+	SetActorLocationAndRotation(FinalActorLocation, TransitionTargetActorQuat.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
+	FirstPersonCameraComponent->SetWorldRotation(TransitionTargetCameraQuat.Rotator());
+
+	Capsule->SetSimulatePhysics(false);
+	CMC->SetGravityDirection(TransitionGravityDirection);
+	Thruster->bIsCharacterMode = true;
+
+	const FVector OrbitalVelocity = PlanetAttachment ? PlanetAttachment->GetOrbitalVelocity() : FVector::ZeroVector;
+	if (bTransitionPendingFloorHit)
+	{
+		CMC->Velocity = FVector::VectorPlaneProject(TransitionVelocityWorld - OrbitalVelocity, TransitionGravityDirection);
+		CMC->SetMovementMode(MOVE_Walking);
+	}
+	else
+	{
+		CMC->Velocity = TransitionVelocityWorld;
+		CMC->SetMovementMode(MOVE_Falling);
+	}
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bAutoManageActiveCameraTarget = true;
+		PC->SetControlRotation(TransitionTargetCameraQuat.Rotator());
+	}
+
+	FirstPersonCameraComponent->bUsePawnControlRotation = true;
+	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
+	TransitionElapsed = 0.0f;
+	bTransitionPendingFloorHit = false;
+	SetActorTickEnabled(false);
+}
+
+void AUWCharacter::AbortTransitionToSurface(FVector InheritedOrbitalVelocity)
+{
+	if (CurrentMovementState != ECharacterMovementState::TransitionToSurface)
+	{
+		return;
+	}
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	if (Capsule == nullptr || CMC == nullptr)
+	{
+		return;
+	}
+
+	SetActorTickEnabled(false);
+	CurrentMovementState = ECharacterMovementState::ZeroG;
+	TransitionElapsed = 0.0f;
+	bTransitionPendingFloorHit = false;
+
+	const FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	const FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
+	const FVector LocalCameraOffset = FirstPersonCameraComponent->GetRelativeLocation();
+	const FVector NewActorLocation = CameraLocation - CameraRotation.RotateVector(LocalCameraOffset);
+	SetActorLocationAndRotation(NewActorLocation, CameraRotation, false, nullptr, ETeleportType::TeleportPhysics);
+
+	CMC->SetMovementMode(MOVE_None);
+	Thruster->bIsCharacterMode = false;
+
+	Capsule->SetSimulatePhysics(true);
+	Capsule->SetEnableGravity(false);
+	Capsule->BodyInstance.bLockXRotation = false;
+	Capsule->BodyInstance.bLockYRotation = false;
+	Capsule->BodyInstance.bLockZRotation = false;
+	Capsule->SetPhysicsLinearVelocity(InheritedOrbitalVelocity.IsNearlyZero() ? TransitionVelocityWorld : InheritedOrbitalVelocity);
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bAutoManageActiveCameraTarget = true;
+		PC->SetControlRotation(CameraRotation);
+
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(RollMappingContext, 2);
+		}
+	}
+
+	FirstPersonCameraComponent->bUsePawnControlRotation = false;
+	FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
+}
+
+void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration)
+{
+	if (bIsTransitioningState)
+	{
+		return;
+	}
+
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		UpdateTransitionSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration);
+		return;
+	}
+
+	if (CurrentMovementState == ECharacterMovementState::ZeroG)
+	{
+		StartTransitionToSurface(OverrideUpVector, OverrideGravityAcceleration);
+		return;
+	}
+
+	SnapToSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration);
+}
+
 void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 {
-	if (bIsTransitioningState) return;
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		AbortTransitionToSurface(InheritedOrbitalVelocity);
+		return;
+	}
 
-	// Already in ZeroG (e.g. hollow sphere → leave atmosphere):
-	// DetachFromPlanet already set the correct physics velocity, don't overwrite it.
+	if (bIsTransitioningState)
+	{
+		return;
+	}
+
 	if (CurrentMovementState == ECharacterMovementState::ZeroG)
 	{
 		return;
@@ -314,33 +701,26 @@ void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 	UCharacterMovementComponent* CMC = GetCharacterMovement();
 
-	// Capture whether CMC velocity is planet-relative (on ground) or
-	// world-absolute (falling after jump, where OnMovementModeChanged already baked in orbital).
 	const bool bWasOnGround = CMC->IsMovingOnGround();
-	FVector CMCVelocity = CMC->Velocity;
+	const FVector CMCVelocity = CMC->Velocity;
 
-	// Record camera world transform before state change
-	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
-	FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
+	const FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	const FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
 
 	CMC->SetMovementMode(MOVE_None);
 	Thruster->bIsCharacterMode = false;
 
-	// Align character body to camera's facing direction, and offset position
-	// so the camera stays in exactly the same world location.
-	FVector LocalCameraOffset = FirstPersonCameraComponent->GetRelativeLocation();
-	FVector NewActorLocation = CameraLocation - CameraRotation.RotateVector(LocalCameraOffset);
+	const FVector LocalCameraOffset = FirstPersonCameraComponent->GetRelativeLocation();
+	const FVector NewActorLocation = CameraLocation - CameraRotation.RotateVector(LocalCameraOffset);
 	SetActorLocationAndRotation(NewActorLocation, CameraRotation, false, nullptr, ETeleportType::TeleportPhysics);
 
 	Capsule->SetSimulatePhysics(true);
-	Capsule->SetEnableGravity(false); // We handle custom forces if needed
+	Capsule->SetEnableGravity(false);
 	Capsule->BodyInstance.bLockXRotation = false;
 	Capsule->BodyInstance.bLockYRotation = false;
 	Capsule->BodyInstance.bLockZRotation = false;
 
-	// Only add InheritedOrbitalVelocity when CMC was planet-relative (on ground).
-	// If the character was falling (after jump), CMC already contains orbital velocity.
-	FVector TotalVelocity = CMCVelocity + (bWasOnGround ? InheritedOrbitalVelocity : FVector::ZeroVector);
+	const FVector TotalVelocity = CMCVelocity + (bWasOnGround ? InheritedOrbitalVelocity : FVector::ZeroVector);
 	Capsule->SetPhysicsLinearVelocity(TotalVelocity);
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -348,7 +728,6 @@ void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 		PC->bAutoManageActiveCameraTarget = true;
 		PC->SetControlRotation(CameraRotation);
 
-		// Enable roll input in zero-g
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
 			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 		{
@@ -383,11 +762,14 @@ FVector AUWCharacter::GetVelocity() const
 {
 	FVector OrbitalVelocity = PlanetAttachment->GetOrbitalVelocity();
 
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		return TransitionVelocityWorld;
+	}
+
 	if (CurrentMovementState == ECharacterMovementState::SurfaceGravity)
 	{
 		const FVector CMCVelocity = GetCharacterMovement()->Velocity;
-		// On ground: CMC velocity is planet-relative, need to add orbital for world-space result.
-		// In air (after jump): CMC velocity is already world-absolute (orbital baked in by OnMovementModeChanged).
 		if (GetCharacterMovement()->IsMovingOnGround())
 		{
 			return CMCVelocity + OrbitalVelocity;
@@ -395,7 +777,6 @@ FVector AUWCharacter::GetVelocity() const
 		return CMCVelocity;
 	}
 
-	// ZeroG: use physics velocity from capsule
 	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
 	{
 		return Capsule->GetPhysicsLinearVelocity() + OrbitalVelocity;
@@ -406,13 +787,11 @@ FVector AUWCharacter::GetVelocity() const
 
 void AUWCharacter::CheckInitialMovementState()
 {
-	// Let the component find and attach to the nearest planet (may trigger OnAttachedToPlanet → EnterSurfaceGravity)
 	PlanetAttachment->CheckInitialPlanetState();
 
 	APlanet* Planet = PlanetAttachment->GetCurrentPlanet();
 	if (Planet)
 	{
-		// Check if inside hollow sphere → override to ZeroG
 		if (Planet->HollowInnerSphere)
 		{
 			float Dist = FVector::Dist(GetActorLocation(), Planet->GetActorLocation());
@@ -427,11 +806,9 @@ void AUWCharacter::CheckInitialMovementState()
 				EnterSurfaceGravity();
 			}
 		}
-		// Otherwise the delegate already set SurfaceGravity, nothing more to do
 	}
 	else
 	{
-		// Not near any planet → ZeroG in deep space
 		EnterZeroG();
 	}
 }
@@ -498,6 +875,11 @@ void AUWCharacter::OnDetachedFromPlanet(FVector OrbitalVelocity)
 	}
 	if (IsOnGravityFloor())
 	{
+		return;
+	}
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		AbortTransitionToSurface();
 		return;
 	}
 	EnterZeroG(OrbitalVelocity);
