@@ -67,8 +67,10 @@ void AGravityFloor::OnVolumeBeginOverlap(UPrimitiveComponent* OverlappedComp, AA
 	{
 		Character->UpdateTransitionSurfaceGravity(FloorUpVector, FloorGravityAcceleration);
 	}
-
-	Character->GetCharacterMovement()->SetGravityDirection(GetGravityDirection());
+	else if (MovementState == ECharacterMovementState::SurfaceGravity)
+	{
+		Character->EnterSurfaceGravity(FloorUpVector, FloorGravityAcceleration);
+	}
 }
 
 void AGravityFloor::OnVolumeEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
@@ -114,6 +116,8 @@ void AGravityFloor::DetermineExitState(AUWCharacter* Character)
 				return;
 			}
 		}
+		// Attached to planet, outside hollow: transition back to planet gravity
+		Character->EnterSurfaceGravity();
 	}
 	else
 	{

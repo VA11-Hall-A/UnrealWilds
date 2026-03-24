@@ -477,22 +477,50 @@ void AUWCharacter::StartTransitionToSurface(FVector OverrideUpVector, double Ove
 	bIsTransitioningState = true;
 
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
-	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	const FVector InitialVelocity = Capsule->GetPhysicsLinearVelocity();
 
+	Capsule->SetSimulatePhysics(false);
+	Capsule->SetEnableGravity(false);
+	Capsule->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
+
+	InitTransitionToSurface(InitialVelocity, OverrideUpVector, OverrideGravityAcceleration);
+	bIsTransitioningState = false;
+}
+
+void AUWCharacter::StartTransitionBetweenSurfaces(FVector OverrideUpVector, double OverrideGravityAcceleration)
+{
+	if (bIsTransitioningState)
+	{
+		return;
+	}
+
+	bIsTransitioningState = true;
+
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	const bool bWasOnGround = CMC->IsMovingOnGround();
+	FVector InitialVelocity = CMC->Velocity;
+	if (bWasOnGround && PlanetAttachment)
+	{
+		InitialVelocity += PlanetAttachment->GetOrbitalVelocity();
+	}
+
+	InitTransitionToSurface(InitialVelocity, OverrideUpVector, OverrideGravityAcceleration);
+	bIsTransitioningState = false;
+}
+
+void AUWCharacter::InitTransitionToSurface(FVector InitialVelocity, FVector OverrideUpVector, double OverrideGravityAcceleration)
+{
 	CurrentMovementState = ECharacterMovementState::TransitionToSurface;
 	TransitionElapsed = 0.0f;
 	bTransitionPendingFloorHit = false;
 	TransitionCameraLocalOffset = FirstPersonCameraComponent->GetRelativeLocation();
-	TransitionVelocityWorld = Capsule->GetPhysicsLinearVelocity();
+	TransitionVelocityWorld = InitialVelocity;
 	TransitionStartActorQuat = GetActorQuat();
 	TransitionStartCameraQuat = FirstPersonCameraComponent->GetComponentQuat();
 
 	UpdateTransitionSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration);
 
-	Capsule->SetSimulatePhysics(false);
-	Capsule->SetEnableGravity(false);
-	Capsule->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
-	CMC->SetMovementMode(MOVE_None);
+	GetCharacterMovement()->SetMovementMode(MOVE_None);
 	Thruster->bIsCharacterMode = false;
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -507,8 +535,6 @@ void AUWCharacter::StartTransitionToSurface(FVector OverrideUpVector, double Ove
 
 	FirstPersonCameraComponent->bUsePawnControlRotation = false;
 	SetActorTickEnabled(true);
-
-	bIsTransitioningState = false;
 }
 
 void AUWCharacter::TickTransitionToSurface(float DeltaTime)
@@ -671,6 +697,21 @@ void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector, double Override
 	{
 		StartTransitionToSurface(OverrideUpVector, OverrideGravityAcceleration);
 		return;
+	}
+
+	// SurfaceGravity: check if gravity direction changes significantly
+	FVector NewUpVector;
+	FVector NewGravityDirection;
+	double NewGravityAcceleration = 0.0;
+	if (ResolveSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration, NewUpVector, NewGravityDirection, NewGravityAcceleration))
+	{
+		const FVector CurrentGravityDir = GetCharacterMovement()->GetGravityDirection();
+		const double Dot = FVector::DotProduct(CurrentGravityDir, NewGravityDirection);
+		if (Dot < 0.999)
+		{
+			StartTransitionBetweenSurfaces(OverrideUpVector, OverrideGravityAcceleration);
+			return;
+		}
 	}
 
 	SnapToSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration);

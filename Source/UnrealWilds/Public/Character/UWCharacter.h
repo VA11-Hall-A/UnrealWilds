@@ -141,6 +141,8 @@ protected:
 	TObjectPtr<UCameraComponent> FirstPersonCameraComponent;
 
 	void StartTransitionToSurface(FVector OverrideUpVector, double OverrideGravityAcceleration);
+	void StartTransitionBetweenSurfaces(FVector OverrideUpVector, double OverrideGravityAcceleration);
+	void InitTransitionToSurface(FVector InitialVelocity, FVector OverrideUpVector, double OverrideGravityAcceleration);
 	void TickTransitionToSurface(float DeltaTime);
 	void FinishTransitionToSurface();
 	void AbortTransitionToSurface(FVector InheritedOrbitalVelocity = FVector::ZeroVector);
