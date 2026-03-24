@@ -20,6 +20,7 @@ UENUM(BlueprintType)
 enum class ECharacterMovementState : uint8
 {
 	SurfaceGravity UMETA(DisplayName = "Surface Gravity"),
+	TransitionToSurface UMETA(DisplayName = "Transition To Surface"),
 	ZeroG UMETA(DisplayName = "Zero Gravity")
 };
 
@@ -33,10 +34,12 @@ public:
 	AUWCharacter(const FObjectInitializer& ObjectInitializer);
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
-	void EnterSurfaceGravity(FVector OverrideUpVector = FVector::ZeroVector);
+	void EnterSurfaceGravity(FVector OverrideUpVector = FVector::ZeroVector, double OverrideGravityAcceleration = -1.0);
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void EnterZeroG(FVector InheritedOrbitalVelocity = FVector::ZeroVector);
+
+	void UpdateTransitionSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration = -1.0);
 
 	ECharacterMovementState GetCurrentMovementState() const;
 
@@ -51,6 +54,7 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void Tick(float DeltaTime) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	ECharacterMovementState CurrentMovementState = ECharacterMovementState::SurfaceGravity;
@@ -101,6 +105,7 @@ protected:
 
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
+	virtual void Jump() override;
 
 	void FlyingMove(const FInputActionValue& Value);
 	void Roll(const FInputActionValue& Value);
@@ -135,6 +140,30 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCameraComponent;
 
+	void StartTransitionToSurface(FVector OverrideUpVector, double OverrideGravityAcceleration);
+	void StartTransitionBetweenSurfaces(FVector OverrideUpVector, double OverrideGravityAcceleration);
+	void InitTransitionToSurface(FVector InitialVelocity, FVector OverrideUpVector, double OverrideGravityAcceleration);
+	void TickTransitionToSurface(float DeltaTime);
+	void FinishTransitionToSurface();
+	void AbortTransitionToSurface(FVector InheritedOrbitalVelocity = FVector::ZeroVector);
+	void SnapToSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration);
+	bool ResolveSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration, FVector& OutUpVector, FVector& OutGravityDirection, double& OutGravityAcceleration) const;
+
+	FQuat TransitionStartActorQuat = FQuat::Identity;
+	FQuat TransitionTargetActorQuat = FQuat::Identity;
+	FQuat TransitionStartCameraQuat = FQuat::Identity;
+	FQuat TransitionTargetCameraQuat = FQuat::Identity;
+	FVector TransitionVelocityWorld = FVector::ZeroVector;
+	FVector TransitionGravityDirection = FVector::DownVector;
+	FVector TransitionCameraLocalOffset = FVector::ZeroVector;
+	double TransitionGravityAcceleration = 980.0;
+	float TransitionElapsed = 0.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
+	float TransitionDuration = 0.5f;
+
+	bool bTransitionPendingFloorHit = false;
+
 	UPROPERTY(VisibleInstanceOnly)
 	bool bOffGround =false;
 
@@ -142,5 +171,4 @@ protected:
 	float TorqueMultiplier=150.0f;
 
 };
-
 
