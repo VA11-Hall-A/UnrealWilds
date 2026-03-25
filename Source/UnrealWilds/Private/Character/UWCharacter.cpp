@@ -521,6 +521,7 @@ void AUWCharacter::InitTransitionToSurface(FVector InitialVelocity, FVector Over
 	UpdateTransitionSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration);
 
 	GetCharacterMovement()->SetMovementMode(MOVE_None);
+	GetCharacterMovement()->SetGravityDirection(TransitionGravityDirection);
 	Thruster->bIsCharacterMode = false;
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -545,6 +546,8 @@ void AUWCharacter::TickTransitionToSurface(float DeltaTime)
 	{
 		return;
 	}
+
+	CMC->SetGravityDirection(TransitionGravityDirection);
 
 	const FVector StartActorLocation = GetActorLocation();
 	const FVector StartCameraLocation = FirstPersonCameraComponent->GetComponentLocation();
