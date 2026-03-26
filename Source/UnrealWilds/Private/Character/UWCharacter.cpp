@@ -13,6 +13,8 @@
 #include "GameFramework/PlayerController.h"
 #include "InputActionValue.h"
 #include "Engine/Engine.h"
+#include "Engine/World.h"
+#include "Gravity/GravityFloor.h"
 #include "Gravity/GravityWorldSubsystem.h"
 #include "Pawn/ThrusterComponent.h"
 #include "Pawn/PlanetAttachmentComponent.h"
@@ -123,6 +125,41 @@ double ComputePlanetGravityAcceleration(const APlanet* Planet, const FVector& Ac
 
 	return FMath::Max(0.0, Intensity);
 }
+
+bool FindWalkableFloorUnderCharacter(const AUWCharacter* Character, const FVector& GravityDirection)
+{
+	if (Character == nullptr)
+	{
+		return false;
+	}
+
+	const UCapsuleComponent* Capsule = Character->GetCapsuleComponent();
+	const UCharacterMovementComponent* CMC = Character->GetCharacterMovement();
+	UWorld* World = Character->GetWorld();
+	if (Capsule == nullptr || CMC == nullptr || World == nullptr)
+	{
+		return false;
+	}
+
+	const FVector Direction = GravityDirection.GetSafeNormal();
+	if (Direction.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const FVector Start = Character->GetActorLocation();
+	const FVector End = Start + Direction * (CMC->MaxStepHeight + 5.0f);
+	FCollisionShape SweepShape = FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(), Capsule->GetScaledCapsuleHalfHeight());
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(GravityFloorEntryFloorQuery), false, Character);
+
+	FHitResult Hit;
+	if (!World->SweepSingleByChannel(Hit, Start, End, Character->GetActorQuat(), ECC_Pawn, SweepShape, QueryParams))
+	{
+		return false;
+	}
+
+	return IsWalkableHit(Hit, Direction, CMC);
+}
 }
 
 // Sets default values
@@ -138,6 +175,16 @@ inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer)
 	FirstPersonCameraComponent->SetRelativeLocation(FVector(0.f, 0.f, 50.f + BaseEyeHeight));
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
+	EnvironmentProbe = CreateDefaultSubobject<USphereComponent>(TEXT("EnvironmentProbe"));
+	EnvironmentProbe->SetupAttachment(GetCapsuleComponent());
+	EnvironmentProbe->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	EnvironmentProbe->SetCollisionObjectType(ECC_Pawn);
+	EnvironmentProbe->SetCollisionResponseToAllChannels(ECR_Ignore);
+	EnvironmentProbe->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
+	EnvironmentProbe->SetGenerateOverlapEvents(true);
+	EnvironmentProbe->CanCharacterStepUpOn = ECB_No;
+	RefreshEnvironmentProbe();
+
 	Thruster = CreateDefaultSubobject<UThrusterComponent>(TEXT("Thruster"));
 	Thruster->ThrustForce = 1000.0;
 	Thruster->bIsCharacterMode = true;
@@ -152,6 +199,7 @@ inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer)
 void AUWCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	RefreshEnvironmentProbe();
 
 	// Add the common and foot mapping contexts (initial state: surface walking)
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -192,6 +240,12 @@ void AUWCharacter::Tick(float DeltaTime)
 	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
 	{
 		TickTransitionToSurface(DeltaTime);
+		return;
+	}
+
+	if (CurrentMovementState == ECharacterMovementState::TransitionToGravityFloor)
+	{
+		TickGravityFloorEntryTransition(DeltaTime);
 	}
 }
 
@@ -225,15 +279,15 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 		}
 		if (ToggleProbeAction)
 		{
-			EIC->BindAction(ToggleProbeAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::ToggleProbe);
+			EIC->BindAction(ToggleProbeAction, ETriggerEvent::Triggered, this, &AUWCharacter::OnToggleProbe);
 		}
 		if (RotateProbeCameraAction)
 		{
-			EIC->BindAction(RotateProbeCameraAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::RotateProbeCamera);
+			EIC->BindAction(RotateProbeCameraAction, ETriggerEvent::Triggered, this, &AUWCharacter::OnRotateProbeCamera);
 		}
 		if (CaptureProbePhotoAction)
 		{
-			EIC->BindAction(CaptureProbePhotoAction, ETriggerEvent::Triggered, ProbeLauncher, &UProbeLauncherComponent::CaptureProbePhoto);
+			EIC->BindAction(CaptureProbePhotoAction, ETriggerEvent::Triggered, this, &AUWCharacter::OnCaptureProbePhoto);
 		}
 		if (InteractAction)
 		{
@@ -246,7 +300,7 @@ void AUWCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 
 void AUWCharacter::Move(const FInputActionValue& Value)
 {
-	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	if (IsInputLocked())
 	{
 		return;
 	}
@@ -261,7 +315,7 @@ void AUWCharacter::Move(const FInputActionValue& Value)
 
 void AUWCharacter::Look(const FInputActionValue& Value)
 {
-	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	if (IsInputLocked())
 	{
 		return;
 	}
@@ -291,7 +345,7 @@ void AUWCharacter::Look(const FInputActionValue& Value)
 
 void AUWCharacter::Jump()
 {
-	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	if (IsInputLocked())
 	{
 		return;
 	}
@@ -301,7 +355,7 @@ void AUWCharacter::Jump()
 
 void AUWCharacter::FlyingMove(const FInputActionValue& Value)
 {
-	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	if (IsInputLocked())
 	{
 		return;
 	}
@@ -315,7 +369,7 @@ void AUWCharacter::FlyingMove(const FInputActionValue& Value)
 
 void AUWCharacter::Roll(const FInputActionValue& Value)
 {
-	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	if (IsInputLocked())
 	{
 		return;
 	}
@@ -327,6 +381,36 @@ void AUWCharacter::Roll(const FInputActionValue& Value)
 		FVector Torque = GetActorForwardVector() * RollValue * TorqueMultiplier;
 		Capsule->AddTorqueInRadians(Torque, NAME_None, true);
 	}
+}
+
+void AUWCharacter::OnToggleProbe()
+{
+	if (IsInputLocked() || ProbeLauncher == nullptr)
+	{
+		return;
+	}
+
+	ProbeLauncher->ToggleProbe();
+}
+
+void AUWCharacter::OnRotateProbeCamera()
+{
+	if (IsInputLocked() || ProbeLauncher == nullptr)
+	{
+		return;
+	}
+
+	ProbeLauncher->RotateProbeCamera();
+}
+
+void AUWCharacter::OnCaptureProbePhoto()
+{
+	if (IsInputLocked() || ProbeLauncher == nullptr)
+	{
+		return;
+	}
+
+	ProbeLauncher->CaptureProbePhoto();
 }
 
 void AUWCharacter::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
@@ -521,6 +605,7 @@ void AUWCharacter::InitTransitionToSurface(FVector InitialVelocity, FVector Over
 	UpdateTransitionSurfaceGravity(OverrideUpVector, OverrideGravityAcceleration);
 
 	GetCharacterMovement()->SetMovementMode(MOVE_None);
+	GetCharacterMovement()->SetGravityDirection(TransitionGravityDirection);
 	Thruster->bIsCharacterMode = false;
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -545,6 +630,8 @@ void AUWCharacter::TickTransitionToSurface(float DeltaTime)
 	{
 		return;
 	}
+
+	CMC->SetGravityDirection(TransitionGravityDirection);
 
 	const FVector StartActorLocation = GetActorLocation();
 	const FVector StartCameraLocation = FirstPersonCameraComponent->GetComponentLocation();
@@ -680,9 +767,210 @@ void AUWCharacter::AbortTransitionToSurface(FVector InheritedOrbitalVelocity)
 	FirstPersonCameraComponent->SetRelativeRotation(FRotator::ZeroRotator);
 }
 
+void AUWCharacter::StartGravityFloorEntryTransition(AGravityFloor* Floor)
+{
+	if (Floor == nullptr || bIsTransitioningState)
+	{
+		return;
+	}
+
+	if (CurrentMovementState == ECharacterMovementState::TransitionToGravityFloor)
+	{
+		if (GravityFloorTransitionFloor.Get() == Floor)
+		{
+			return;
+		}
+
+		AbortGravityFloorEntryTransition();
+	}
+
+	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
+	{
+		AbortTransitionToSurface();
+	}
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	if (Capsule == nullptr || CMC == nullptr || FirstPersonCameraComponent == nullptr || EnvironmentProbe == nullptr)
+	{
+		return;
+	}
+
+	bIsTransitioningState = true;
+
+	const FVector FloorUpVector = -Floor->GetGravityDirection();
+	const FVector FloorGravityDirection = Floor->GetGravityDirection();
+	const FRotator CameraRotation = FirstPersonCameraComponent->GetComponentRotation();
+	const FVector NewForward = BuildSurfaceForward(FloorUpVector, CameraRotation.Vector(), GetActorForwardVector());
+
+	GravityFloorTransitionFloor = Floor;
+	GravityFloorTransitionElapsed = 0.0f;
+	GravityFloorTransitionProbeLocalToFloor = Floor->GetActorTransform().InverseTransformPosition(GetEnvironmentProbeLocation());
+	GravityFloorTransitionStartActorQuat = GetActorQuat();
+	GravityFloorTransitionTargetActorQuat = FRotationMatrix::MakeFromXZ(NewForward, FloorUpVector).ToQuat();
+	GravityFloorTransitionStartCameraQuat = FirstPersonCameraComponent->GetComponentQuat();
+
+	FRotator GravityRelativeCamera = GetGravityRelativeRotation(CameraRotation, FloorGravityDirection);
+	GravityRelativeCamera.Roll = 0.0f;
+	GravityFloorTransitionTargetCameraQuat = GetGravityWorldRotation(GravityRelativeCamera, FloorGravityDirection).Quaternion();
+
+	CMC->StopMovementImmediately();
+	CMC->SetMovementMode(MOVE_None);
+	CMC->SetGravityDirection(FloorGravityDirection);
+
+	if (CurrentMovementState == ECharacterMovementState::ZeroG)
+	{
+		Capsule->SetSimulatePhysics(false);
+		Capsule->SetEnableGravity(false);
+		Capsule->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	}
+
+	Capsule->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
+	Thruster->bIsCharacterMode = false;
+	SetInputLocked(true);
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bAutoManageActiveCameraTarget = true;
+	}
+
+	FirstPersonCameraComponent->bUsePawnControlRotation = false;
+	CurrentMovementState = ECharacterMovementState::TransitionToGravityFloor;
+	SetActorTickEnabled(true);
+	bIsTransitioningState = false;
+}
+
+void AUWCharacter::TickGravityFloorEntryTransition(float DeltaTime)
+{
+	if (CurrentMovementState != ECharacterMovementState::TransitionToGravityFloor)
+	{
+		return;
+	}
+
+	AGravityFloor* Floor = GravityFloorTransitionFloor.Get();
+	if (Floor == nullptr || FirstPersonCameraComponent == nullptr || EnvironmentProbe == nullptr)
+	{
+		AbortGravityFloorEntryTransition();
+		return;
+	}
+
+	GravityFloorTransitionElapsed += DeltaTime;
+	const float Alpha = FMath::Clamp(GravityFloorTransitionElapsed / FMath::Max(TransitionDuration, KINDA_SMALL_NUMBER), 0.0f, 1.0f);
+	const float EasedAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, Alpha, 2.0f);
+
+	const FQuat NewActorQuat = FQuat::Slerp(GravityFloorTransitionStartActorQuat, GravityFloorTransitionTargetActorQuat, EasedAlpha).GetNormalized();
+	const FQuat NewCameraQuat = FQuat::Slerp(GravityFloorTransitionStartCameraQuat, GravityFloorTransitionTargetCameraQuat, EasedAlpha).GetNormalized();
+	const FVector ProbeWorldLocation = Floor->GetActorTransform().TransformPosition(GravityFloorTransitionProbeLocalToFloor);
+	const FVector NewActorLocation = ProbeWorldLocation - NewActorQuat.RotateVector(EnvironmentProbe->GetRelativeLocation());
+
+	SetActorLocationAndRotation(NewActorLocation, NewActorQuat.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
+	FirstPersonCameraComponent->SetWorldRotation(NewCameraQuat.Rotator());
+
+	if (Alpha >= 1.0f)
+	{
+		FinishGravityFloorEntryTransition();
+	}
+}
+
+void AUWCharacter::FinishGravityFloorEntryTransition()
+{
+	if (CurrentMovementState != ECharacterMovementState::TransitionToGravityFloor)
+	{
+		return;
+	}
+
+	AGravityFloor* Floor = GravityFloorTransitionFloor.Get();
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	if (Floor == nullptr || Capsule == nullptr || CMC == nullptr || FirstPersonCameraComponent == nullptr || EnvironmentProbe == nullptr)
+	{
+		AbortGravityFloorEntryTransition();
+		return;
+	}
+
+	const FVector ProbeWorldLocation = Floor->GetActorTransform().TransformPosition(GravityFloorTransitionProbeLocalToFloor);
+	const FVector FinalActorLocation = ProbeWorldLocation - GravityFloorTransitionTargetActorQuat.RotateVector(EnvironmentProbe->GetRelativeLocation());
+	SetActorLocationAndRotation(FinalActorLocation, GravityFloorTransitionTargetActorQuat.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
+	FirstPersonCameraComponent->SetWorldRotation(GravityFloorTransitionTargetCameraQuat.Rotator());
+
+	Capsule->SetSimulatePhysics(false);
+	Capsule->SetEnableGravity(false);
+	CMC->SetGravityDirection(Floor->GetGravityDirection());
+	CMC->Velocity = FVector::ZeroVector;
+	CMC->SetMovementMode(FindWalkableFloorUnderCharacter(this, Floor->GetGravityDirection()) ? MOVE_Walking : MOVE_Falling);
+	Thruster->bIsCharacterMode = true;
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bAutoManageActiveCameraTarget = true;
+		PC->SetControlRotation(GravityFloorTransitionTargetCameraQuat.Rotator());
+	}
+
+	if (FirstPersonCameraComponent != nullptr)
+	{
+		FirstPersonCameraComponent->bUsePawnControlRotation = true;
+	}
+	GravityFloorTransitionFloor.Reset();
+	GravityFloorTransitionElapsed = 0.0f;
+	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
+	SetInputLocked(false);
+	SetActorTickEnabled(false);
+}
+
+void AUWCharacter::AbortGravityFloorEntryTransition()
+{
+	if (CurrentMovementState != ECharacterMovementState::TransitionToGravityFloor)
+	{
+		return;
+	}
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	if (Capsule != nullptr)
+	{
+		Capsule->SetSimulatePhysics(false);
+		Capsule->SetEnableGravity(false);
+	}
+
+	if (CMC != nullptr)
+	{
+		CMC->StopMovementImmediately();
+		if (AGravityFloor* Floor = GravityFloorTransitionFloor.Get())
+		{
+			CMC->SetGravityDirection(Floor->GetGravityDirection());
+		}
+		CMC->SetMovementMode(MOVE_Falling);
+	}
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->bAutoManageActiveCameraTarget = true;
+		if (FirstPersonCameraComponent != nullptr)
+		{
+			PC->SetControlRotation(FirstPersonCameraComponent->GetComponentRotation());
+		}
+	}
+
+	if (FirstPersonCameraComponent != nullptr)
+	{
+		FirstPersonCameraComponent->bUsePawnControlRotation = true;
+	}
+	Thruster->bIsCharacterMode = true;
+	GravityFloorTransitionFloor.Reset();
+	GravityFloorTransitionElapsed = 0.0f;
+	CurrentMovementState = ECharacterMovementState::SurfaceGravity;
+	SetInputLocked(false);
+	SetActorTickEnabled(false);
+}
+
 void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration)
 {
 	if (bIsTransitioningState)
+	{
+		return;
+	}
+
+	if (CurrentMovementState == ECharacterMovementState::TransitionToGravityFloor)
 	{
 		return;
 	}
@@ -719,6 +1007,11 @@ void AUWCharacter::EnterSurfaceGravity(FVector OverrideUpVector, double Override
 
 void AUWCharacter::EnterZeroG(FVector InheritedOrbitalVelocity)
 {
+	if (CurrentMovementState == ECharacterMovementState::TransitionToGravityFloor)
+	{
+		AbortGravityFloorEntryTransition();
+	}
+
 	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
 	{
 		AbortTransitionToSurface(InheritedOrbitalVelocity);
@@ -787,6 +1080,27 @@ ECharacterMovementState AUWCharacter::GetCurrentMovementState() const
 	return CurrentMovementState;
 }
 
+UPrimitiveComponent* AUWCharacter::GetEnvironmentProbeComponent() const
+{
+	return EnvironmentProbe;
+}
+
+FVector AUWCharacter::GetEnvironmentProbeLocation() const
+{
+	return EnvironmentProbe ? EnvironmentProbe->GetComponentLocation() : GetActorLocation();
+}
+
+bool AUWCharacter::IsEnvironmentProbe(const UPrimitiveComponent* Component) const
+{
+	return Component != nullptr && Component == EnvironmentProbe;
+}
+
+bool AUWCharacter::IsTransitioningToGravityFloor(const AGravityFloor* Floor) const
+{
+	return CurrentMovementState == ECharacterMovementState::TransitionToGravityFloor
+		&& GravityFloorTransitionFloor.Get() == Floor;
+}
+
 bool AUWCharacter::IsOnGravityFloor() const
 {
 	if (UWorld* World = GetWorld())
@@ -806,6 +1120,11 @@ FVector AUWCharacter::GetVelocity() const
 	if (CurrentMovementState == ECharacterMovementState::TransitionToSurface)
 	{
 		return TransitionVelocityWorld;
+	}
+
+	if (CurrentMovementState == ECharacterMovementState::TransitionToGravityFloor)
+	{
+		return FVector::ZeroVector;
 	}
 
 	if (CurrentMovementState == ECharacterMovementState::SurfaceGravity)
@@ -835,7 +1154,7 @@ void AUWCharacter::CheckInitialMovementState()
 	{
 		if (Planet->HollowInnerSphere)
 		{
-			float Dist = FVector::Dist(GetActorLocation(), Planet->GetActorLocation());
+			const float Dist = FVector::Dist(GetEnvironmentProbeLocation(), Planet->GetActorLocation());
 			float HollowRadius = Planet->HollowInnerSphere->GetScaledSphereRadius();
 			if (Dist < HollowRadius)
 			{
@@ -856,8 +1175,16 @@ void AUWCharacter::CheckInitialMovementState()
 
 void AUWCharacter::OnInteract()
 {
+	if (IsInputLocked())
+	{
+		return;
+	}
+
 	TArray<AActor*> OverlappingActors;
-	GetOverlappingActors(OverlappingActors, AShipPawn::StaticClass());
+	if (EnvironmentProbe)
+	{
+		EnvironmentProbe->GetOverlappingActors(OverlappingActors, AShipPawn::StaticClass());
+	}
 
 	for (AActor* Actor : OverlappingActors)
 	{
@@ -870,6 +1197,35 @@ void AUWCharacter::OnInteract()
 			}
 		}
 	}
+}
+
+void AUWCharacter::SetInputLocked(bool bLocked)
+{
+	bInputLocked = bLocked;
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->SetIgnoreMoveInput(bLocked);
+		PC->SetIgnoreLookInput(bLocked);
+	}
+}
+
+bool AUWCharacter::IsInputLocked() const
+{
+	return bInputLocked
+		|| CurrentMovementState == ECharacterMovementState::TransitionToSurface
+		|| CurrentMovementState == ECharacterMovementState::TransitionToGravityFloor;
+}
+
+void AUWCharacter::RefreshEnvironmentProbe()
+{
+	if (!EnvironmentProbe)
+	{
+		return;
+	}
+
+	EnvironmentProbe->SetSphereRadius(EnvironmentProbeRadius);
+	EnvironmentProbe->SetRelativeLocation(EnvironmentProbeOffset);
 }
 
 void AUWCharacter::PossessedBy(AController* NewController)

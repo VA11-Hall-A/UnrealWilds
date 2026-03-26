@@ -10,9 +10,12 @@ class UThrusterComponent;
 class UProbeLauncherComponent;
 class UPlanetAttachmentComponent;
 class UCameraComponent;
+class UPrimitiveComponent;
 class UInputMappingContext;
 class UInputAction;
+class USphereComponent;
 class APlanet;
+class AGravityFloor;
 class AShipPawn;
 struct FInputActionValue;
 
@@ -21,6 +24,7 @@ enum class ECharacterMovementState : uint8
 {
 	SurfaceGravity UMETA(DisplayName = "Surface Gravity"),
 	TransitionToSurface UMETA(DisplayName = "Transition To Surface"),
+	TransitionToGravityFloor UMETA(DisplayName = "Transition To Gravity Floor"),
 	ZeroG UMETA(DisplayName = "Zero Gravity")
 };
 
@@ -45,6 +49,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	bool IsOnGravityFloor() const;
+
+	UPrimitiveComponent* GetEnvironmentProbeComponent() const;
+	FVector GetEnvironmentProbeLocation() const;
+	bool IsEnvironmentProbe(const UPrimitiveComponent* Component) const;
+	bool IsTransitioningToGravityFloor(const AGravityFloor* Floor) const;
+	void StartGravityFloorEntryTransition(AGravityFloor* Floor);
+	void AbortGravityFloorEntryTransition();
 
 	virtual FVector GetVelocity() const override;
 
@@ -110,6 +121,9 @@ protected:
 	void FlyingMove(const FInputActionValue& Value);
 	void Roll(const FInputActionValue& Value);
 	void OnInteract();
+	void OnToggleProbe();
+	void OnRotateProbeCamera();
+	void OnCaptureProbePhoto();
 
 	UPROPERTY(BlueprintReadOnly)
 	UThrusterComponent* Thruster;
@@ -140,14 +154,29 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCameraComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Collision")
+	TObjectPtr<USphereComponent> EnvironmentProbe;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Collision", meta = (ClampMin = "0.1", ForceUnits = "cm"))
+	float EnvironmentProbeRadius = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Collision")
+	FVector EnvironmentProbeOffset = FVector::ZeroVector;
+
 	void StartTransitionToSurface(FVector OverrideUpVector, double OverrideGravityAcceleration);
 	void StartTransitionBetweenSurfaces(FVector OverrideUpVector, double OverrideGravityAcceleration);
 	void InitTransitionToSurface(FVector InitialVelocity, FVector OverrideUpVector, double OverrideGravityAcceleration);
 	void TickTransitionToSurface(float DeltaTime);
 	void FinishTransitionToSurface();
 	void AbortTransitionToSurface(FVector InheritedOrbitalVelocity = FVector::ZeroVector);
+
+	void TickGravityFloorEntryTransition(float DeltaTime);
+	void FinishGravityFloorEntryTransition();
+
 	void SnapToSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration);
 	bool ResolveSurfaceGravity(FVector OverrideUpVector, double OverrideGravityAcceleration, FVector& OutUpVector, FVector& OutGravityDirection, double& OutGravityAcceleration) const;
+	void SetInputLocked(bool bLocked);
+	bool IsInputLocked() const;
 
 	FQuat TransitionStartActorQuat = FQuat::Identity;
 	FQuat TransitionTargetActorQuat = FQuat::Identity;
@@ -158,6 +187,15 @@ protected:
 	FVector TransitionCameraLocalOffset = FVector::ZeroVector;
 	double TransitionGravityAcceleration = 980.0;
 	float TransitionElapsed = 0.0f;
+
+	TWeakObjectPtr<AGravityFloor> GravityFloorTransitionFloor;
+	FQuat GravityFloorTransitionStartActorQuat = FQuat::Identity;
+	FQuat GravityFloorTransitionTargetActorQuat = FQuat::Identity;
+	FQuat GravityFloorTransitionStartCameraQuat = FQuat::Identity;
+	FQuat GravityFloorTransitionTargetCameraQuat = FQuat::Identity;
+	FVector GravityFloorTransitionProbeLocalToFloor = FVector::ZeroVector;
+	float GravityFloorTransitionElapsed = 0.0f;
+	bool bInputLocked = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
 	float TransitionDuration = 0.5f;
@@ -170,5 +208,5 @@ protected:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadWrite)
 	float TorqueMultiplier=150.0f;
 
+	void RefreshEnvironmentProbe();
 };
-
