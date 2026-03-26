@@ -192,7 +192,7 @@ inline AUWCharacter::AUWCharacter(const FObjectInitializer& ObjectInitializer)
 	ProbeLauncher = CreateDefaultSubobject<UProbeLauncherComponent>(TEXT("ProbeLauncher"));
 
 	PlanetAttachment = CreateDefaultSubobject<UPlanetAttachmentComponent>(TEXT("PlanetAttachment"));
-	PlanetAttachment->Initialize(GetCapsuleComponent(), EnvironmentProbe);
+	PlanetAttachment->Initialize(GetCapsuleComponent());
 }
 
 // Called when the game starts or when spawned
