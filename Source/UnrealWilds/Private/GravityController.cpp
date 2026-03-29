@@ -68,11 +68,11 @@ void AGravityController::UpdateRotation(float DeltaTime)
 		SetControlRotation(GetGravityWorldRotation(ViewRotation, GravityDirection));
 	}
 
-	APawn* const P = GetPawnOrSpectator();
-	if (P)
-	{
-		P->FaceRotation(ViewRotation, DeltaTime);
-	}
+	// APawn* const P = GetPawnOrSpectator();
+	// if (P)
+	// {
+	// 	P->FaceRotation(ViewRotation, DeltaTime);
+	// }
 }
 
 FRotator AGravityController::GetGravityRelativeRotation(FRotator Rotation, FVector GravityDirection)
